@@ -10,7 +10,7 @@ function save(key, data) {
 // ─── Inject keyframes (#15 fix) ─────────────────────────────────────────────
 (function(){
   const s = document.createElement("style");
-  s.textContent = "@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}} *{-webkit-tap-highlight-color:transparent} input,button,select{font-family:inherit} body{margin:0;padding:0;background:#0A0A0F}";
+  s.textContent = "@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}} *{-webkit-tap-highlight-color:transparent;box-sizing:border-box} input,button,select{font-family:inherit} html,body{margin:0;padding:0;background:#0A0A0F;overflow-x:hidden;-webkit-overflow-scrolling:touch} #root{min-height:100vh;overflow-y:auto}";
   document.head.appendChild(s);
 })();
 
@@ -38,6 +38,9 @@ const icons = {
   edit:     "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
   copy:     "M20 9h-9a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-9a2 2 0 00-2-2zM5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1",
   history:  "M12 8v4l3 3M3 12a9 9 0 1018 0 9 9 0 00-18 0z",
+  repeat:   "M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3",
+  up:       "M18 15l-6-6-6 6",
+  down:     "M6 9l6 6 6-6",
 };
 
 const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
@@ -95,7 +98,16 @@ function App() {
     saveWorkouts([...workouts, copy]);
   };
 
-  if (screen === "home")    return React.createElement(HomeScreen,    { goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet, editWorkout, duplicateWorkout, hist });
+  // v12: reorder workouts
+  const moveWorkout = (idx, dir) => {
+    const next = idx + dir;
+    if (next < 0 || next >= workouts.length) return;
+    const arr = [...workouts];
+    [arr[idx], arr[next]] = [arr[next], arr[idx]];
+    saveWorkouts(arr);
+  };
+
+  if (screen === "home")    return React.createElement(HomeScreen,    { goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet, editWorkout, duplicateWorkout, hist, moveWorkout });
   if (screen === "timer")   return React.createElement(TimerScreen,   { workout: activeWorkout, goTo, savePr: (pr) => savePrs([pr, ...prs]), cheatsheet, logSession });
   if (screen === "cheat")   return React.createElement(CheatsheetScreen, { goTo, cheatsheet, setCheatsheet, prevScreen });
   if (screen === "pr")      return React.createElement(PRScreen,      { prs, savePrs, goTo });
@@ -108,7 +120,7 @@ function App() {
 // ═══════════════════════════════════════════════════════════════════════════
 //  HOME
 // ═══════════════════════════════════════════════════════════════════════════
-function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet, editWorkout, duplicateWorkout, hist }) {
+function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet, editWorkout, duplicateWorkout, hist, moveWorkout }) {
   const latestPr = prs[0];
   return (
     React.createElement('div', { style: S.screen },
@@ -217,6 +229,10 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
                 onDelete: () => saveWorkouts(workouts.filter((_,j) => j !== i)),
                 onEdit: () => editWorkout(i),
                 onDuplicate: () => duplicateWorkout(i),
+                onMoveUp: () => moveWorkout(i, -1),
+                onMoveDown: () => moveWorkout(i, 1),
+                isFirst: i === 0,
+                isLast: i === workouts.length - 1,
               })
             )
       )
@@ -224,7 +240,7 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
   );
 }
 
-function WorkoutCard({ workout, onStart, onDelete, onEdit, onDuplicate }) {
+function WorkoutCard({ workout, onStart, onDelete, onEdit, onDuplicate, onMoveUp, onMoveDown, isFirst, isLast }) {
   const totalTime = workout.blocks.reduce((a,b) => a + b.duration, 0);
   return React.createElement('div', { style: S.workoutCard },
     React.createElement('div', { style: S.workoutCardInfo },
@@ -236,7 +252,18 @@ function WorkoutCard({ workout, onStart, onDelete, onEdit, onDuplicate }) {
         )
       )
     ),
-    React.createElement('div', { style: { display:"flex", gap:8, alignItems:"center" } },
+    React.createElement('div', { style: { display:"flex", gap:6, alignItems:"center" } },
+      // v12: move up/down
+      React.createElement('div', { style: { display:"flex", flexDirection:"column", gap:2 } },
+        !isFirst && React.createElement('button', {
+          style: { ...S.arrowBtn, fontSize:12, padding:"2px 4px" },
+          onClick: onMoveUp
+        }, React.createElement(Icon, { d: icons.up, size: 12 })),
+        !isLast && React.createElement('button', {
+          style: { ...S.arrowBtn, fontSize:12, padding:"2px 4px" },
+          onClick: onMoveDown
+        }, React.createElement(Icon, { d: icons.down, size: 12 }))
+      ),
       React.createElement('button', { style: S.editBtn, onClick: onEdit },
         React.createElement(Icon, { d: icons.edit, size: 14 })
       ),
@@ -289,10 +316,26 @@ function tone(freq, dur, vol, type, offset) {
   } catch(e) { console.warn("tone err", e); }
 }
 
-function beepTick()    { tone(1046, 0.12, 0.5, "sine", 0.01); }
-function beepGo()      { tone(440, 0.4, 0.7, "sawtooth", 0.01); }
-function beepEndTick() { tone(2000, 0.04, 0.4, "sine", 0.01); }
-function beepDone()    { [0,1,2,3].forEach(i => tone(330+i*110, 0.09, 0.5, "sine", 0.01+i*0.08)); }
+function beepTick()    { tone(1046, 0.12, 0.5, "sine", 0.01); vib([30]); }
+function beepGo()      { tone(440, 0.4, 0.7, "sawtooth", 0.01); vib([200]); }
+function beepEndTick() { tone(2000, 0.04, 0.4, "sine", 0.01); vib([50]); }
+function beepDone()    { [0,1,2,3].forEach(i => tone(330+i*110, 0.09, 0.5, "sine", 0.01+i*0.08)); vib([100,50,100,50,200]); }
+
+// v8: vibration helper
+function vib(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch {} }
+
+// v11: wake lock — prevent screen from turning off during workout
+let _wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      _wakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch {}
+}
+function releaseWakeLock() {
+  if (_wakeLock) { _wakeLock.release().catch(() => {}); _wakeLock = null; }
+}
 
 let _speechUnlocked = false;
 
@@ -326,6 +369,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const [showPr, setShowPr]   = useState(false);
   const [editFreeIdx, setEditFreeIdx]   = useState(null);   // v3: edit block in free mode
   const [editFreeBlock, setEditFreeBlock] = useState(null); // v3
+  const [roundCount, setRoundCount]   = useState(0);        // v7: AMRAP round counter
 
   const blockIdxRef  = useRef(0);
   const timeLeftRef  = useRef(null);
@@ -353,6 +397,13 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const setLeadIn   = (v) => { leadInRef.current   = v; setLeadInD(v);   };
   const setRunning  = (v) => { runningRef.current  = v; setRunningD(v);  };
   const setDone     = (v) => { doneRef.current     = v; setDoneD(v);     };
+
+  // v11: wake lock — keep screen on while running
+  useEffect(() => {
+    if (running) requestWakeLock();
+    else releaseWakeLock();
+    return () => releaseWakeLock();
+  }, [running]);
 
   useEffect(() => {
     if (!freeMode && timeLeftRef.current === null && currentBlock)
@@ -444,6 +495,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
     setLeadIn(0);
     leadDoneRef.current  = false;
     cuesFiredRef.current = new Set();
+    setRoundCount(0); // v7
   };
 
   const addBlock = (type) => {
@@ -465,7 +517,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
     setEditFreeIdx(null); setEditFreeBlock(null);
   };
 
-  const R = 100, C = 2 * Math.PI * R;
+  const R = 130, C = 2 * Math.PI * R;
 
   const leadProgress   = leadIn > 0 ? 1 - (leadIn / LEAD_IN) : 0;
   const blockProgress  = freeMode ? 0 : currentBlock
@@ -480,9 +532,11 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const displayAccent = isLeadIn ? leadColor : accent;
   const isEndingTick  = !isLeadIn && !freeMode && timeLeft !== null && timeLeft <= 3 && timeLeft > 0 && running;
 
+  const circleSize = 340;
+
   return React.createElement('div', { style: { ...S.screen, background:"#0A0A0F" } },
     React.createElement('div', { style: S.timerHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
+      React.createElement('button', { style: S.backBtn, onClick: () => { releaseWakeLock(); goTo("home"); } },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.timerTitle }, workout ? workout.name.toUpperCase() : "LIVRE"),
@@ -495,6 +549,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
         )
       )
     ),
+    // Block progress bar (kept, compact)
     !freeMode && React.createElement('div', { style: S.blockBar },
       blocks.map((b, i) =>
         React.createElement('div', {
@@ -508,16 +563,20 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
         })
       )
     ),
-    React.createElement('div', { style: S.timerCircleWrapper },
-      React.createElement('svg', { width: 260, height: 260, viewBox:"0 0 240 240" },
-        React.createElement('circle', { cx:120, cy:120, r:R, fill:"none", stroke:"#1E1E2E", strokeWidth:12 }),
+    // Big circle — tap to play/pause
+    React.createElement('div', {
+      style: { ...S.timerCircleWrapper, width: circleSize, height: circleSize, cursor:"pointer" },
+      onClick: toggleRun
+    },
+      React.createElement('svg', { width: circleSize, height: circleSize, viewBox:"0 0 300 300" },
+        React.createElement('circle', { cx:150, cy:150, r:R, fill:"none", stroke:"#1E1E2E", strokeWidth:10 }),
         React.createElement('circle', {
-          cx:120, cy:120, r:R,
-          fill:"none", stroke: isEndingTick ? "#FF4444" : displayAccent, strokeWidth:12,
+          cx:150, cy:150, r:R,
+          fill:"none", stroke: isEndingTick ? "#FF4444" : displayAccent, strokeWidth:10,
           strokeDasharray: C,
           strokeDashoffset: freeMode && !isLeadIn ? 0 : dash,
           strokeLinecap:"round",
-          transform:"rotate(-90 120 120)",
+          transform:"rotate(-90 150 150)",
           style:{
             transition:"stroke-dashoffset 0.8s ease, stroke 0.2s",
             filter: isEndingTick ? "drop-shadow(0 0 8px #FF4444)" : isLeadIn ? `drop-shadow(0 0 8px ${leadColor})` : "none",
@@ -527,20 +586,21 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
       React.createElement('div', { style: S.timerOverlay },
         done
           ? React.createElement('div', { style:{ textAlign:"center" } },
-              React.createElement('div', { style:{ fontSize:40, marginBottom:4 } }, "🏁"),
-              React.createElement('div', { style:{ color:"#fff", fontSize:18, fontWeight:700 } }, "CONCLUÍDO!"),
-              React.createElement('div', { style:{ color:"#888", fontSize:13, marginTop:4 } }, `${fmt(elapsed)} total`)
+              React.createElement('div', { style:{ fontSize:48, marginBottom:4 } }, "🏁"),
+              React.createElement('div', { style:{ color:"#fff", fontSize:22, fontWeight:700 } }, "CONCLUÍDO!"),
+              React.createElement('div', { style:{ color:"#888", fontSize:14, marginTop:4 } }, `${fmt(elapsed)} total`),
+              roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:16, fontWeight:700, marginTop:4 } }, `${roundCount} rounds`)
             )
           : isLeadIn
             ? React.createElement('div', { style:{ textAlign:"center" } },
-                React.createElement('div', { style:{ color: leadColor, fontSize:11, fontWeight:700, letterSpacing:3, marginBottom:8 } }, "PREPARAR"),
+                React.createElement('div', { style:{ color: leadColor, fontSize:12, fontWeight:700, letterSpacing:3, marginBottom:8 } }, "PREPARAR"),
                 React.createElement('div', { style:{
                   ...S.timerDisplay,
-                  fontSize: leadIn <= 3 ? 86 : 72,
+                  fontSize: leadIn <= 3 ? 96 : 80,
                   color: leadIn <= 3 ? "#FF4444" : "#fff",
                   transition:"font-size 0.1s, color 0.1s",
                 }}, String(leadIn)),
-                React.createElement('div', { style:{ color:"#555", fontSize:13, marginTop:8 } }, "começa em breve...")
+                React.createElement('div', { style:{ color:"#555", fontSize:14, marginTop:8 } }, "começa em breve...")
               )
             : React.createElement(React.Fragment, null,
                 React.createElement('div', { style:{ ...S.timerLabel, color: isEndingTick ? "#FF4444" : accent } },
@@ -548,31 +608,48 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
                 ),
                 React.createElement('div', { style:{
                   ...S.timerDisplay,
-                  fontSize: isEndingTick ? 72 : 56,
+                  fontSize: isEndingTick ? 82 : 68,
                   color: isEndingTick ? "#FF4444" : "#fff",
                   transition:"font-size 0.15s, color 0.15s",
                 }},
                   freeMode ? fmt(elapsed) : fmt(timeLeft ?? (currentBlock?.duration ?? 0))
                 ),
-                !freeMode && React.createElement('div', { style: S.timerSub }, `${blockIdx+1} / ${blocks.length}`)
+                // Play/pause hint icon inside circle
+                !done && React.createElement('div', { style:{ marginTop:10, opacity:0.4 } },
+                  React.createElement(Icon, { d: running ? icons.pause : icons.play, size: 24, fill: running ? "none" : "#fff", stroke: running ? 1.5 : 0 })
+                ),
+                !freeMode && React.createElement('div', { style: { ...S.timerSub, marginTop:4 } }, `${blockIdx+1} / ${blocks.length}`),
+                roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:13, fontWeight:700, marginTop:2 } }, `${roundCount} rounds`)
               )
       )
     ),
-    React.createElement('div', { style: S.timerControls },
+    // Compact controls: reset + next only (play/pause is on circle)
+    React.createElement('div', { style: { ...S.timerControls, gap:40 } },
       React.createElement('button', { style: S.controlBtn, onClick: reset },
         React.createElement(Icon, { d: icons.stop, size: 22 })
-      ),
-      React.createElement('button', {
-        style:{ ...S.playBtn, background: done ? "#333" : isLeadIn ? leadColor : accent },
-        onClick: toggleRun
-      },
-        React.createElement(Icon, { d: running ? icons.pause : icons.play, size: 32, fill:"white", stroke: 0 })
       ),
       !freeMode
         ? React.createElement('button', { style: S.controlBtn, onClick: goNext },
             React.createElement(Icon, { d: icons.next, size: 22 })
           )
-        : React.createElement('div', { style:{ width:52 } })
+        : null
+    ),
+    // v7: Round counter (AMRAP)
+    React.createElement('div', { style:{ display:"flex", justifyContent:"center", gap:12, marginBottom:12 } },
+      React.createElement('button', {
+        style:{ background:"#1E1E2E", border:"1px solid #FF6B3544", borderRadius:12,
+                padding:"10px 24px", color:"#FF6B35", fontSize:14, fontWeight:700,
+                cursor:"pointer", display:"flex", alignItems:"center", gap:8 },
+        onClick: () => setRoundCount(c => c + 1)
+      },
+        React.createElement(Icon, { d: icons.add, size: 16 }),
+        `Round (${roundCount})`
+      ),
+      roundCount > 0 && React.createElement('button', {
+        style:{ background:"#1E1E2E", border:"1px solid #FF444444", borderRadius:12,
+                padding:"10px 14px", color:"#FF4444", fontSize:13, cursor:"pointer" },
+        onClick: () => setRoundCount(c => Math.max(0, c - 1))
+      }, "−1")
     ),
     !workout && React.createElement('div', { style: S.addBlockRow },
       ["work","rest","warmup"].map(t =>
@@ -587,24 +664,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
         )
       )
     ),
-    !freeMode && React.createElement('div', { style: S.blockList },
-      blocks.map((b, i) =>
-        React.createElement('div', {
-          key: i,
-          style:{ ...S.blockListItem, opacity: i < blockIdx ? 0.4 : 1, borderLeftColor: BLOCK_COLOR_MAP[b.type] }
-        },
-          React.createElement('div', { style:{ display:"flex", alignItems:"center", gap:8 } },
-            i < blockIdx && React.createElement(Icon, { d: icons.check, size:14, stroke:2.5 }),
-            React.createElement('span', { style:{ color: BLOCK_COLOR_MAP[b.type], fontSize:11, fontWeight:700 } },
-              BLOCK_LABELS[b.type]
-            ),
-            React.createElement('span', { style:{ color:"#ccc", fontSize:13 } }, b.label)
-          ),
-          React.createElement('span', { style:{ color:"#666", fontSize:13 } }, fmt(b.duration))
-        )
-      )
-    ),
-    // v3: free mode block list with edit + delete
+    // v3: free mode block list with edit + delete (structured mode has no list — uses block bar)
     freeMode && blocks.length > 0 && React.createElement('div', { style: { ...S.blockList, maxHeight: 300 } },
       blocks.map((b, i) =>
         React.createElement('div', { key: i, style: { ...S.blockListItem, borderLeftColor: BLOCK_COLOR_MAP[b.type] } },
@@ -859,7 +919,7 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  BUILDER (v1: supports edit mode)
+//  BUILDER (v1: edit mode, v6: repeat groups)
 // ═══════════════════════════════════════════════════════════════════════════
 function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
   const editing = editIdx !== null && workouts[editIdx];
@@ -876,6 +936,11 @@ function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
   const [editBlkIdx, setEditBlkIdx]   = useState(null);
   const [editBlock, setEditBlock]     = useState(null);
 
+  // v6: repeat group state
+  const [repeatFrom, setRepeatFrom] = useState(null);
+  const [repeatTo, setRepeatTo]     = useState(null);
+  const [repeatCount, setRepeatCount] = useState(2);
+
   const totalTime = blocks.reduce((a,b) => a + b.duration, 0);
 
   const addBlock   = (type) => {
@@ -891,11 +956,37 @@ function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
   const moveUp   = (i) => { if (i===0) return; const b=[...blocks]; [b[i-1],b[i]]=[b[i],b[i-1]]; setBlocks(b); };
   const moveDown = (i) => { if (i===blocks.length-1) return; const b=[...blocks]; [b[i],b[i+1]]=[b[i+1],b[i]]; setBlocks(b); };
 
+  // v6: apply repeat
+  const applyRepeat = () => {
+    if (repeatFrom === null || repeatTo === null) return;
+    const from = Math.min(repeatFrom, repeatTo);
+    const to = Math.max(repeatFrom, repeatTo);
+    const group = blocks.slice(from, to + 1);
+    const repeated = [];
+    for (let r = 0; r < repeatCount; r++) {
+      group.forEach(b => repeated.push({ ...b }));
+    }
+    setBlocks([...blocks.slice(0, from), ...repeated, ...blocks.slice(to + 1)]);
+    setRepeatFrom(null); setRepeatTo(null); setRepeatCount(2);
+  };
+
+  const cancelRepeat = () => { setRepeatFrom(null); setRepeatTo(null); setRepeatCount(2); };
+
+  // v6: toggle selection of repeat range
+  const toggleRepeatSelect = (i) => {
+    if (repeatFrom === null) {
+      setRepeatFrom(i); setRepeatTo(i);
+    } else if (repeatTo === repeatFrom) {
+      setRepeatTo(i);
+    } else {
+      cancelRepeat();
+    }
+  };
+
   const handleSave = () => {
     if (!name || blocks.length === 0) return;
     const w = { name, blocks };
     if (editing) {
-      // v1: update existing workout
       const arr = [...workouts];
       arr[editIdx] = w;
       saveWorkouts(arr);
@@ -904,6 +995,14 @@ function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
     }
     setEditIdx(null);
     goTo("home");
+  };
+
+  // v6: helper to check if block is in selection range
+  const inRange = (i) => {
+    if (repeatFrom === null) return false;
+    const from = Math.min(repeatFrom, repeatTo ?? repeatFrom);
+    const to = Math.max(repeatFrom, repeatTo ?? repeatFrom);
+    return i >= from && i <= to;
   };
 
   return React.createElement('div', { style: S.screen },
@@ -928,7 +1027,13 @@ function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
         React.createElement('span', { style:{ color:"#FF6B35", fontWeight:700 } }, `${fmt(totalTime)} total`)
       ),
       blocks.map((b, i) =>
-        React.createElement('div', { key: i, style: S.builderBlock },
+        React.createElement('div', {
+          key: i,
+          style: {
+            ...S.builderBlock,
+            border: inRange(i) ? "1px solid #A29BFE" : "1px solid transparent",
+          }
+        },
           React.createElement('div', { style:{ ...S.builderBlockAccent, background: BLOCK_COLOR_MAP[b.type] } }),
           React.createElement('div', { style:{ ...S.builderBlockBody, cursor:"pointer" }, onClick: () => openEdit(i) },
             React.createElement('div', { style: S.builderBlockType }, BLOCK_LABELS[b.type]),
@@ -941,11 +1046,60 @@ function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
             React.createElement('button', { style: S.arrowBtn, onClick: () => moveUp(i) },   "▲"),
             React.createElement('button', { style: S.arrowBtn, onClick: () => moveDown(i) }, "▼")
           ),
+          // v6: repeat selection button
+          React.createElement('button', {
+            style: {
+              ...S.editBtn,
+              color: inRange(i) ? "#A29BFE" : "#555",
+              borderColor: inRange(i) ? "#A29BFE" : "#333",
+              padding: "4px 6px",
+            },
+            onClick: () => toggleRepeatSelect(i)
+          }, React.createElement(Icon, { d: icons.repeat, size: 12 })),
           React.createElement('button', { style: S.deleteBtn, onClick: () => removeBlock(i) },
             React.createElement(Icon, { d: icons.trash, size: 14 })
           )
         )
       ),
+
+      // v6: repeat controls panel
+      repeatFrom !== null && React.createElement('div', {
+        style: {
+          background: "#1A1A2E", border: "1px solid #A29BFE44", borderRadius: 12,
+          padding: "12px 14px", marginTop: 8, marginBottom: 12
+        }
+      },
+        React.createElement('div', { style: { color: "#A29BFE", fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 } }, "REPETIR GRUPO"),
+        React.createElement('div', { style: { color: "#888", fontSize: 12, marginBottom: 10 } },
+          `Blocos ${Math.min(repeatFrom, repeatTo ?? repeatFrom) + 1} a ${Math.max(repeatFrom, repeatTo ?? repeatFrom) + 1} selecionados`
+        ),
+        React.createElement('div', { style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 12 } },
+          React.createElement('span', { style: { color: "#fff", fontSize: 13 } }, "Repetir"),
+          [2, 3, 4, 5, 6, 8, 10].map(n =>
+            React.createElement('button', {
+              key: n,
+              style: {
+                background: repeatCount === n ? "#A29BFE" : "#1E1E2E",
+                border: "none", borderRadius: 6, padding: "6px 10px",
+                color: repeatCount === n ? "#fff" : "#666",
+                fontSize: 12, fontWeight: 700, cursor: "pointer",
+              },
+              onClick: () => setRepeatCount(n)
+            }, `${n}x`)
+          )
+        ),
+        React.createElement('div', { style: { display: "flex", gap: 8 } },
+          React.createElement('button', {
+            style: { ...S.sectionBtn, flex: 1, textAlign: "center" },
+            onClick: cancelRepeat
+          }, "Cancelar"),
+          React.createElement('button', {
+            style: { ...S.submitBtn, flex: 2, padding: "10px" },
+            onClick: applyRepeat
+          }, `Aplicar ${repeatCount}x`)
+        )
+      ),
+
       React.createElement('div', { style: S.addBlockGrid },
         ["work","rest","warmup","cooldown"].map(t =>
           React.createElement('button', {
@@ -1142,7 +1296,7 @@ Regras OBRIGATÓRIAS:
       React.createElement('div', { style:{ color:"#555", fontSize:13 } }, "Toque no campo acima para tentar novamente"),
     ),
 
-    phase === "preview" && result && React.createElement('div', { style:{ padding:"0 16px 120px" } },
+    phase === "preview" && result && React.createElement('div', { style:{ padding:"0 16px 120px", overflowY:"auto" } },
       React.createElement('div', { style: S.scanResultHeader },
         preview && React.createElement('img', { src: preview, style: S.scanThumb, alt:"" }),
         React.createElement('div', { style:{ flex:1 } },
@@ -1170,10 +1324,6 @@ Regras OBRIGATÓRIAS:
           )
         )
       ),
-      React.createElement('button', {
-        style:{ ...S.sectionBtn, marginTop:8, marginBottom:20, width:"100%", padding:"10px" },
-        onClick: () => { if (fileRef.current) fileRef.current.click(); }
-      }, "📸 Outra foto"),
       React.createElement('div', { style: S.scanActions },
         React.createElement('button', { style:{ ...S.submitBtn, background:"#1E1E2E", flex:1 }, onClick: saveOnly }, "Salvar"),
         React.createElement('button', { style:{ ...S.submitBtn, flex:2 }, onClick: saveAndStart }, "▶  Iniciar Agora")
@@ -1234,7 +1384,7 @@ function QuickTextScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
 
   return React.createElement('div',{style:S.screen},
     React.createElement('div',{style:S.screenHeader},React.createElement('button',{style:S.backBtn,onClick:()=>goTo("home")},React.createElement(Icon,{d:icons.back,size:22})),React.createElement('div',{style:S.screenHeaderTitle},"DIGITAR TREINO"),React.createElement('div',{style:{width:32}})),
-    React.createElement('div',{style:{padding:"0 16px 120px"}},
+    React.createElement('div',{style:{padding:"0 16px 120px",overflowY:"auto"}},
       React.createElement('div',{style:{position:"relative",marginBottom:8}},React.createElement('input',{style:{...S.input,fontSize:18,fontWeight:600,paddingRight:52,marginBottom:0},placeholder:"emom 20, tabata, amrap 10...",value:input,onChange:e=>{setInput(e.target.value);setResult(null);setError("");},onKeyDown:e=>{if(e.key==="Enter"){e.target.blur();parse();}},autoCapitalize:"none",autoCorrect:"off",spellCheck:false}),input.length>0&&React.createElement('button',{style:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#FF6B35",border:"none",borderRadius:10,padding:"6px 12px",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"},onClick:()=>parse()},"IR")),
       error&&React.createElement('div',{style:{color:"#FF4444",fontSize:12,marginBottom:12}},error),
       !result&&React.createElement('div',null,React.createElement('div',{style:{color:"#888",fontSize:11,fontWeight:700,letterSpacing:2,marginBottom:10}},"EXEMPLOS"),examples.map((ex,i)=>React.createElement('button',{key:i,style:{width:"100%",background:"#13131A",border:"1px solid #2A2A3A",borderRadius:12,padding:"12px 14px",marginBottom:8,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"},onClick:()=>{setInput(ex.label);parse(ex.label);}},React.createElement('div',null,React.createElement('div',{style:{color:"#00C9A7",fontSize:14,fontWeight:700,textAlign:"left"}},ex.label),React.createElement('div',{style:{color:"#666",fontSize:12,marginTop:2}},ex.desc)),React.createElement(Icon,{d:icons.next,size:16,stroke:2})))),
@@ -1349,7 +1499,7 @@ function HistoryScreen({ goTo, hist, saveHist }) {
 //  STYLES
 // ═══════════════════════════════════════════════════════════════════════════
 const S = {
-  screen:{minHeight:"100vh",background:"#0A0A0F",overflowY:"auto",paddingBottom:40,fontFamily:"'-apple-system',BlinkMacSystemFont,'SF Pro Display',sans-serif"},
+  screen:{height:"100vh",background:"#0A0A0F",overflowY:"scroll",WebkitOverflowScrolling:"touch",paddingBottom:80,fontFamily:"'-apple-system',BlinkMacSystemFont,'SF Pro Display',sans-serif"},
   homeHeader:{padding:"env(safe-area-inset-top,52px) 20px 20px",paddingTop:"max(52px,env(safe-area-inset-top,52px))",display:"flex",justifyContent:"space-between",alignItems:"flex-start"},
   greeting:{color:"#888",fontSize:14,marginBottom:4,letterSpacing:1},homeTitle:{color:"#fff",fontSize:42,fontWeight:900,lineHeight:1.05,letterSpacing:-1,whiteSpace:"pre-line"},
   prBadge:{background:"#1E1E2E",borderRadius:14,padding:"12px 14px",display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",color:"#F7B731"},prCount:{color:"#fff",fontSize:18,fontWeight:700},
@@ -1365,7 +1515,7 @@ const S = {
   backBtn:{background:"none",border:"none",color:"#888",cursor:"pointer",padding:4,display:"flex"},blockBar:{display:"flex",gap:3,padding:"0 16px 12px",height:10},blockBarItem:{height:4,borderRadius:2,minWidth:4,transition:"background 0.3s"},
   timerCircleWrapper:{position:"relative",width:260,height:260,margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center"},timerOverlay:{position:"absolute",top:0,left:0,right:0,bottom:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"},timerLabel:{fontSize:11,fontWeight:700,letterSpacing:3,marginBottom:4},timerDisplay:{color:"#fff",fontSize:56,fontWeight:900,letterSpacing:-2,lineHeight:1},timerSub:{color:"#555",fontSize:14,marginTop:8},
   timerControls:{display:"flex",alignItems:"center",justifyContent:"center",gap:24,marginBottom:16},controlBtn:{background:"#1E1E2E",border:"none",borderRadius:16,width:52,height:52,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff"},playBtn:{border:"none",borderRadius:28,width:72,height:72,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"background 0.3s"},
-  addBlockRow:{display:"flex",gap:8,padding:"0 16px 12px",justifyContent:"center"},addBlockBtn:{background:"#0E0E16",border:"1px solid",borderRadius:10,padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center"},blockList:{padding:"0 16px",maxHeight:220,overflowY:"auto"},blockListItem:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",marginBottom:4,background:"#13131A",borderRadius:8,borderLeft:"3px solid"},
+  addBlockRow:{display:"flex",gap:8,padding:"0 16px 12px",justifyContent:"center"},addBlockBtn:{background:"#0E0E16",border:"1px solid",borderRadius:10,padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center"},blockList:{padding:"0 16px",maxHeight:"40vh",overflowY:"auto",WebkitOverflowScrolling:"touch"},blockListItem:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",marginBottom:4,background:"#13131A",borderRadius:8,borderLeft:"3px solid"},
   screenHeader:{padding:"max(52px,env(safe-area-inset-top,52px)) 16px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"},screenHeaderTitle:{color:"#fff",fontSize:15,fontWeight:700,letterSpacing:2,flex:1,textAlign:"center"},
   prEmpty:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",textAlign:"center"},prGroup:{marginBottom:24},prGroupTitle:{color:"#FF6B35",fontSize:12,fontWeight:700,letterSpacing:2,marginBottom:8},prRow:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#13131A",borderRadius:12,marginBottom:6},prRowLeft:{flex:1},prRowValue:{color:"#fff",fontSize:22,fontWeight:800},prRowUnit:{fontSize:13,fontWeight:400,color:"#888"},prRowNotes:{color:"#555",fontSize:12,marginTop:2},prRowDate:{color:"#555",fontSize:12},
   builderMeta:{display:"flex",justifyContent:"space-between",marginBottom:14,fontSize:13},builderBlock:{display:"flex",alignItems:"center",gap:8,background:"#13131A",borderRadius:12,padding:"12px 10px",marginBottom:8},builderBlockAccent:{width:4,height:40,borderRadius:2,flexShrink:0},builderBlockBody:{flex:1},builderBlockType:{fontSize:10,fontWeight:700,letterSpacing:1,color:"#666"},builderBlockLabel:{fontSize:14,color:"#fff",fontWeight:600,marginTop:2},builderBlockTime:{color:"#FF6B35",fontSize:14,fontWeight:700,marginRight:4},arrowBtn:{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,padding:1,lineHeight:1},addBlockGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12},addTypeBtn:{background:"#0E0E16",border:"1px solid",borderRadius:12,padding:"12px",cursor:"pointer",textAlign:"center"},
