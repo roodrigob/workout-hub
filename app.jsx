@@ -112,7 +112,7 @@ function App() {
   if (screen === "cheat")   return React.createElement(CheatsheetScreen, { goTo, cheatsheet, setCheatsheet, prevScreen });
   if (screen === "pr")      return React.createElement(PRScreen,      { prs, savePrs, goTo });
   if (screen === "builder") return React.createElement(BuilderScreen, { workouts, saveWorkouts, goTo, editIdx, setEditIdx });
-  if (screen === "scan")    return React.createElement(ScanScreen,    { goTo, saveWorkouts, workouts, startWorkout });
+  if (screen === "scan")    return React.createElement(ScanScreen,    { goTo, saveWorkouts, workouts, startWorkout, setCheatsheet });
   if (screen === "quick")   return React.createElement(QuickTextScreen, { goTo, saveWorkouts, workouts, startWorkout });
   if (screen === "history") return React.createElement(HistoryScreen, { goTo, hist, saveHist }); // v4
 }
@@ -488,7 +488,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
     }
     if (next === half && next > 10 && !fired.has("half")) {
       fired.add("half");
-      speak(btype === "rest" ? "Halfway through rest" : "Halfway there");
+      speak("Halfway there");
     }
 
     if (next <= 0) { goNext(); return; }
@@ -1196,7 +1196,7 @@ function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  SCAN SCREEN (fixed: no duplicate button, fileRef for "Escolher Foto")
 // ═══════════════════════════════════════════════════════════════════════════
-function ScanScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
+function ScanScreen({ goTo, saveWorkouts, workouts, startWorkout, setCheatsheet }) {
   const [phase, setPhase]       = useState("idle");
   const [preview, setPreview]   = useState(null);
   const [result, setResult]     = useState(null);
@@ -1215,10 +1215,44 @@ function ScanScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
       setPhase("loading");
       setResult(null);
       setErrMsg("");
-      await analyzeImage(dataUrl, file.type || "image/jpeg");
+      // Run both analyses in parallel: timer blocks + cheatsheet (exercises & weights)
+      await Promise.all([
+        analyzeImage(dataUrl, file.type || "image/jpeg"),
+        analyzeCheatsheet(dataUrl, file.type || "image/jpeg"),
+      ]);
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  };
+
+  // Cheatsheet analysis — extract exercises & weights from same image
+  const analyzeCheatsheet = async (dataUrl, mediaType) => {
+    const base64 = dataUrl.split(",")[1];
+    const safeType = ["image/jpeg","image/png","image/gif","image/webp"].includes(mediaType) ? mediaType : "image/jpeg";
+    const prompt = 'Analise esta imagem de treino e extraia APENAS os exercicios e pesos/cargas. Retorne JSON valido sem markdown: {"name":"nome do treino","items":["exercicio - peso/carga como aparece"],"notes":""}. Foque em: nome do exercicio, series, repeticoes e peso/carga. Ignore tempos, logos, instrucoes gerais. Formato de cada item: "Exercicio - SxR peso" (ex: "Agachamento - 4x8 80kg"). Max 30 itens.';
+    try {
+      const res = await fetch(window.location.hostname.includes("netlify") ? "/.netlify/functions/analyze" : "/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 800,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: safeType, data: base64 } },
+            { type: "text", text: prompt }
+          ]}]
+        })
+      });
+      const rawText = await res.text();
+      if (!res.ok) return; // silently fail — timer blocks are the priority
+      const data = JSON.parse(rawText);
+      const raw = (data.content || []).map(c => c.text || "").join("").trim();
+      const clean = raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
+      const parsed = JSON.parse(clean);
+      if (parsed.items?.length) {
+        setCheatsheet({ ...parsed, preview: dataUrl });
+      }
+    } catch {}
   };
 
   const analyzeImage = async (dataUrl, mediaType) => {
