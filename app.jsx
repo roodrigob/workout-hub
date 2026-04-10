@@ -316,10 +316,10 @@ function tone(freq, dur, vol, type, offset) {
   } catch(e) { console.warn("tone err", e); }
 }
 
-function beepTick()    { tone(1046, 0.12, 0.5, "sine", 0.01); vib([30]); }
-function beepGo()      { tone(440, 0.4, 0.7, "sawtooth", 0.01); vib([200]); }
-function beepEndTick() { tone(2000, 0.04, 0.4, "sine", 0.01); vib([50]); }
-function beepDone()    { [0,1,2,3].forEach(i => tone(330+i*110, 0.09, 0.5, "sine", 0.01+i*0.08)); vib([100,50,100,50,200]); }
+function beepTick()    { tone(1046, 0.15, 0.7, "sine", 0.01); vib([50]); }
+function beepGo()      { tone(440, 0.5, 0.9, "sawtooth", 0.01); tone(880, 0.3, 0.6, "sine", 0.15); vib([300]); }
+function beepEndTick() { tone(2000, 0.06, 0.5, "sine", 0.01); vib([50]); }
+function beepDone()    { [0,1,2,3].forEach(i => tone(330+i*110, 0.12, 0.6, "sine", 0.01+i*0.08)); vib([100,50,100,50,200]); }
 
 // v8: vibration helper
 function vib(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch {} }
@@ -370,6 +370,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const [editFreeIdx, setEditFreeIdx]   = useState(null);   // v3: edit block in free mode
   const [editFreeBlock, setEditFreeBlock] = useState(null); // v3
   const [roundCount, setRoundCount]   = useState(0);        // v7: AMRAP round counter
+  const [showCheat, setShowCheat]     = useState(false);    // cheat overlay (timer keeps running)
 
   const blockIdxRef  = useRef(0);
   const timeLeftRef  = useRef(null);
@@ -475,7 +476,8 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const toggleRun = () => {
     if (doneRef.current) return;
     unlockAudio();
-    tone(440, 0.001, 0.001, "sine", 0.01);
+    // Play an audible click on start to ensure AudioContext is fully active
+    tone(800, 0.05, 0.3, "sine", 0.01);
     unlockSpeech();
     if (!runningRef.current) {
       if (leadInRef.current === 0 && !leadDoneRef.current) setLeadIn(LEAD_IN);
@@ -517,7 +519,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
     setEditFreeIdx(null); setEditFreeBlock(null);
   };
 
-  const R = 130, C = 2 * Math.PI * R;
+  const R = 150, C = 2 * Math.PI * R;
 
   const leadProgress   = leadIn > 0 ? 1 - (leadIn / LEAD_IN) : 0;
   const blockProgress  = freeMode ? 0 : currentBlock
@@ -532,16 +534,19 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const displayAccent = isLeadIn ? leadColor : accent;
   const isEndingTick  = !isLeadIn && !freeMode && timeLeft !== null && timeLeft <= 3 && timeLeft > 0 && running;
 
-  const circleSize = 340;
+  const circleSize = 380;
 
-  return React.createElement('div', { style: { ...S.screen, background:"#0A0A0F" } },
+  return React.createElement('div', { style: { ...S.screen, background:"#0A0A0F", display:"flex", flexDirection:"column" } },
     React.createElement('div', { style: S.timerHeader },
       React.createElement('button', { style: S.backBtn, onClick: () => { releaseWakeLock(); goTo("home"); } },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.timerTitle }, workout ? workout.name.toUpperCase() : "LIVRE"),
       React.createElement('div', { style:{ display:"flex", gap:4 } },
-        React.createElement('button', { style: { ...S.backBtn, color: cheatsheet ? "#00C9A7" : "#555" }, onClick: () => goTo("cheat") },
+        React.createElement('button', {
+          style: { ...S.backBtn, color: cheatsheet ? "#00C9A7" : "#555" },
+          onClick: () => cheatsheet && setShowCheat(v => !v)
+        },
           React.createElement('span', { style:{ fontSize:18 } }, "📋")
         ),
         React.createElement('button', { style: { ...S.backBtn, color:"#F7B731" }, onClick: () => setShowPr(true) },
@@ -563,68 +568,72 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
         })
       )
     ),
-    // Big circle — tap to play/pause
+    // Big circle — tap to play/pause, centered
     React.createElement('div', {
-      style: { ...S.timerCircleWrapper, width: circleSize, height: circleSize, cursor:"pointer" },
-      onClick: toggleRun
+      style: { flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:0 }
     },
-      React.createElement('svg', { width: circleSize, height: circleSize, viewBox:"0 0 300 300" },
-        React.createElement('circle', { cx:150, cy:150, r:R, fill:"none", stroke:"#1E1E2E", strokeWidth:10 }),
-        React.createElement('circle', {
-          cx:150, cy:150, r:R,
-          fill:"none", stroke: isEndingTick ? "#FF4444" : displayAccent, strokeWidth:10,
-          strokeDasharray: C,
-          strokeDashoffset: freeMode && !isLeadIn ? 0 : dash,
-          strokeLinecap:"round",
-          transform:"rotate(-90 150 150)",
-          style:{
-            transition:"stroke-dashoffset 0.8s ease, stroke 0.2s",
-            filter: isEndingTick ? "drop-shadow(0 0 8px #FF4444)" : isLeadIn ? `drop-shadow(0 0 8px ${leadColor})` : "none",
-          }
-        })
-      ),
-      React.createElement('div', { style: S.timerOverlay },
-        done
-          ? React.createElement('div', { style:{ textAlign:"center" } },
-              React.createElement('div', { style:{ fontSize:48, marginBottom:4 } }, "🏁"),
-              React.createElement('div', { style:{ color:"#fff", fontSize:22, fontWeight:700 } }, "CONCLUÍDO!"),
-              React.createElement('div', { style:{ color:"#888", fontSize:14, marginTop:4 } }, `${fmt(elapsed)} total`),
-              roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:16, fontWeight:700, marginTop:4 } }, `${roundCount} rounds`)
-            )
-          : isLeadIn
+      React.createElement('div', {
+        style: { ...S.timerCircleWrapper, width: circleSize, height: circleSize, cursor:"pointer" },
+        onClick: toggleRun
+      },
+        React.createElement('svg', { width: circleSize, height: circleSize, viewBox:"0 0 340 340" },
+          React.createElement('circle', { cx:170, cy:170, r:R, fill:"none", stroke:"#1E1E2E", strokeWidth:10 }),
+          React.createElement('circle', {
+            cx:170, cy:170, r:R,
+            fill:"none", stroke: isEndingTick ? "#FF4444" : displayAccent, strokeWidth:10,
+            strokeDasharray: C,
+            strokeDashoffset: freeMode && !isLeadIn ? 0 : dash,
+            strokeLinecap:"round",
+            transform:"rotate(-90 170 170)",
+            style:{
+              transition:"stroke-dashoffset 0.8s ease, stroke 0.2s",
+              filter: isEndingTick ? "drop-shadow(0 0 10px #FF4444)" : isLeadIn ? `drop-shadow(0 0 10px ${leadColor})` : "none",
+            }
+          })
+        ),
+        React.createElement('div', { style: S.timerOverlay },
+          done
             ? React.createElement('div', { style:{ textAlign:"center" } },
-                React.createElement('div', { style:{ color: leadColor, fontSize:12, fontWeight:700, letterSpacing:3, marginBottom:8 } }, "PREPARAR"),
-                React.createElement('div', { style:{
-                  ...S.timerDisplay,
-                  fontSize: leadIn <= 3 ? 96 : 80,
-                  color: leadIn <= 3 ? "#FF4444" : "#fff",
-                  transition:"font-size 0.1s, color 0.1s",
-                }}, String(leadIn)),
-                React.createElement('div', { style:{ color:"#555", fontSize:14, marginTop:8 } }, "começa em breve...")
+                React.createElement('div', { style:{ fontSize:52, marginBottom:4 } }, "🏁"),
+                React.createElement('div', { style:{ color:"#fff", fontSize:24, fontWeight:700 } }, "CONCLUÍDO!"),
+                React.createElement('div', { style:{ color:"#888", fontSize:16, marginTop:6 } }, `${fmt(elapsed)} total`),
+                roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:18, fontWeight:700, marginTop:4 } }, `${roundCount} rounds`)
               )
-            : React.createElement(React.Fragment, null,
-                React.createElement('div', { style:{ ...S.timerLabel, color: isEndingTick ? "#FF4444" : accent } },
-                  freeMode ? "LIVRE" : (currentBlock?.label || BLOCK_LABELS[currentBlock?.type] || "TREINO")
-                ),
-                React.createElement('div', { style:{
-                  ...S.timerDisplay,
-                  fontSize: isEndingTick ? 82 : 68,
-                  color: isEndingTick ? "#FF4444" : "#fff",
-                  transition:"font-size 0.15s, color 0.15s",
-                }},
-                  freeMode ? fmt(elapsed) : fmt(timeLeft ?? (currentBlock?.duration ?? 0))
-                ),
-                // Play/pause hint icon inside circle
-                !done && React.createElement('div', { style:{ marginTop:10, opacity:0.4 } },
-                  React.createElement(Icon, { d: running ? icons.pause : icons.play, size: 24, fill: running ? "none" : "#fff", stroke: running ? 1.5 : 0 })
-                ),
-                !freeMode && React.createElement('div', { style: { ...S.timerSub, marginTop:4 } }, `${blockIdx+1} / ${blocks.length}`),
-                roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:13, fontWeight:700, marginTop:2 } }, `${roundCount} rounds`)
-              )
+            : isLeadIn
+              ? React.createElement('div', { style:{ textAlign:"center" } },
+                  React.createElement('div', { style:{ color: leadColor, fontSize:13, fontWeight:700, letterSpacing:3, marginBottom:8 } }, "PREPARAR"),
+                  React.createElement('div', { style:{
+                    ...S.timerDisplay,
+                    fontSize: leadIn <= 3 ? 110 : 90,
+                    color: leadIn <= 3 ? "#FF4444" : "#fff",
+                    transition:"font-size 0.1s, color 0.1s",
+                  }}, String(leadIn)),
+                  React.createElement('div', { style:{ color:"#555", fontSize:14, marginTop:8 } }, "começa em breve...")
+                )
+              : React.createElement(React.Fragment, null,
+                  React.createElement('div', { style:{ ...S.timerLabel, color: isEndingTick ? "#FF4444" : accent, fontSize:13 } },
+                    freeMode ? "LIVRE" : (currentBlock?.label || BLOCK_LABELS[currentBlock?.type] || "TREINO")
+                  ),
+                  React.createElement('div', { style:{
+                    ...S.timerDisplay,
+                    fontSize: isEndingTick ? 90 : 76,
+                    color: isEndingTick ? "#FF4444" : "#fff",
+                    transition:"font-size 0.15s, color 0.15s",
+                  }},
+                    freeMode ? fmt(elapsed) : fmt(timeLeft ?? (currentBlock?.duration ?? 0))
+                  ),
+                  // Play/pause hint icon inside circle
+                  !done && React.createElement('div', { style:{ marginTop:12, opacity:0.35 } },
+                    React.createElement(Icon, { d: running ? icons.pause : icons.play, size: 28, fill: running ? "none" : "#fff", stroke: running ? 1.5 : 0 })
+                  ),
+                  !freeMode && React.createElement('div', { style: { ...S.timerSub, marginTop:4 } }, `${blockIdx+1} / ${blocks.length}`),
+                  roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:14, fontWeight:700, marginTop:2 } }, `${roundCount} rounds`)
+                )
+        )
       )
     ),
-    // Compact controls: reset + next only (play/pause is on circle)
-    React.createElement('div', { style: { ...S.timerControls, gap:40 } },
+    // Compact controls: reset + next only
+    React.createElement('div', { style: { ...S.timerControls, gap:40, paddingBottom:8 } },
       React.createElement('button', { style: S.controlBtn, onClick: reset },
         React.createElement(Icon, { d: icons.stop, size: 22 })
       ),
@@ -690,7 +699,37 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
       onChange: setEditFreeBlock,
       onConfirm: saveEditFree,
       onClose: () => setEditFreeIdx(null),
-    })
+    }),
+    // Cheat overlay — timer keeps running behind
+    showCheat && cheatsheet && React.createElement('div', {
+      style: {
+        position:"fixed", inset:0, background:"rgba(0,0,0,0.92)",
+        zIndex:90, overflowY:"auto", WebkitOverflowScrolling:"touch",
+        padding:"0 0 40px",
+      }
+    },
+      React.createElement('div', { style: { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"max(52px,env(safe-area-inset-top,48px)) 16px 12px" } },
+        React.createElement('div', { style: { color:"#00C9A7", fontSize:15, fontWeight:700, letterSpacing:2 } }, "CONSULTA"),
+        React.createElement('button', {
+          style: { background:"#00C9A722", border:"1px solid #00C9A744", borderRadius:10, padding:"8px 14px", color:"#00C9A7", fontSize:13, fontWeight:700, cursor:"pointer" },
+          onClick: () => setShowCheat(false)
+        }, "✕ Voltar ao Timer")
+      ),
+      cheatsheet.preview && React.createElement('div', { style: { padding:"0 16px 12px", display:"flex", gap:12, alignItems:"center" } },
+        React.createElement('img', { src: cheatsheet.preview, style: { width:48, height:48, objectFit:"cover", borderRadius:8, flexShrink:0 } }),
+        React.createElement('div', null,
+          React.createElement('div', { style: { color:"#fff", fontSize:17, fontWeight:800 } }, cheatsheet.name),
+          React.createElement('div', { style: { color:"#666", fontSize:12, marginTop:2 } }, (cheatsheet.items?.length || 0) + " exercícios")
+        )
+      ),
+      React.createElement('div', { style: { padding:"0 16px" } },
+        (cheatsheet.items || []).map((item, i) =>
+          React.createElement('div', { key: i, style: { background:"#13131A", borderRadius:12, padding:"14px 16px", marginBottom:8, borderLeft:"4px solid #00C9A7" } },
+            React.createElement('div', { style: { color:"#fff", fontSize:20, fontWeight:600, lineHeight:1.5 } }, item)
+          )
+        )
+      )
+    )
   );
 }
 
@@ -1402,7 +1441,7 @@ function QuickTextScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
 // ═══════════════════════════════════════════════════════════════════════════
 function CheatsheetScreen({ goTo, cheatsheet, setCheatsheet, prevScreen }) {
   const [phase, setPhase]=useState(cheatsheet?"done":"idle");const [wk,setWk]=useState(cheatsheet||null);const [err,setErr]=useState("");
-  const handleFile=async(e)=>{const file=e.target.files?.[0];if(!file)return;setPhase("loading");setWk(null);setErr("");const reader=new FileReader();reader.onload=async(ev)=>{const dataUrl=ev.target.result,base64=dataUrl.split(",")[1];const st=["image/jpeg","image/png","image/gif","image/webp"].includes(file.type)?file.type:"image/jpeg";const prompt='Analise esta imagem de treino e extraia o conteudo. Retorne APENAS JSON valido sem markdown: {"name":"nome do treino","items":["linha como aparece na imagem"],"notes":"observacoes ou vazio"}. Copie o texto fielmente, max 30 itens, ignore logos.';try{const res=await fetch(window.location.hostname.includes("netlify")?"/.netlify/functions/analyze":"/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:st,data:base64}},{type:"text",text:prompt}]}]})});const rawText=await res.text();if(!res.ok){let j={};try{j=JSON.parse(rawText);}catch{};throw new Error(j?.error?.message||"Erro "+res.status);}const data=JSON.parse(rawText);const raw=(data.content||[]).map(c=>c.text||"").join("").trim();const clean=raw.replace(/^```[\w]*\n?/,"").replace(/\n?```$/,"").trim();const parsed=JSON.parse(clean);if(!parsed.items?.length)throw new Error("Nao foi possivel ler.");const result={...parsed,preview:dataUrl};setWk(result);setCheatsheet(result);setPhase("done");}catch(err){setErr(err.message||"Erro.");setPhase("error");}};reader.readAsDataURL(file);};
+  const handleFile=async(e)=>{const file=e.target.files?.[0];if(!file)return;setPhase("loading");setWk(null);setErr("");const reader=new FileReader();reader.onload=async(ev)=>{const dataUrl=ev.target.result,base64=dataUrl.split(",")[1];const st=["image/jpeg","image/png","image/gif","image/webp"].includes(file.type)?file.type:"image/jpeg";const prompt='Analise esta imagem de treino e extraia APENAS os exercicios e pesos/cargas. Retorne JSON valido sem markdown: {"name":"nome do treino","items":["exercicio - peso/carga como aparece"],"notes":""}. Foque em: nome do exercicio, series, repeticoes e peso/carga. Ignore tempos, logos, instrucoes gerais. Formato de cada item: "Exercicio - SxR peso" (ex: "Agachamento - 4x8 80kg"). Max 30 itens.';try{const res=await fetch(window.location.hostname.includes("netlify")?"/.netlify/functions/analyze":"/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:st,data:base64}},{type:"text",text:prompt}]}]})});const rawText=await res.text();if(!res.ok){let j={};try{j=JSON.parse(rawText);}catch{};throw new Error(j?.error?.message||"Erro "+res.status);}const data=JSON.parse(rawText);const raw=(data.content||[]).map(c=>c.text||"").join("").trim();const clean=raw.replace(/^```[\w]*\n?/,"").replace(/\n?```$/,"").trim();const parsed=JSON.parse(clean);if(!parsed.items?.length)throw new Error("Nao foi possivel ler.");const result={...parsed,preview:dataUrl};setWk(result);setCheatsheet(result);setPhase("done");}catch(err){setErr(err.message||"Erro.");setPhase("error");}};reader.readAsDataURL(file);};
 
   return React.createElement('div',{style:S.screen},
     React.createElement('div',{style:S.screenHeader},React.createElement('button',{style:{...S.backBtn,color:"#888"},onClick:()=>goTo(prevScreen||"home")},React.createElement(Icon,{d:icons.back,size:22})),React.createElement('div',{style:S.screenHeaderTitle},"CONSULTA"),prevScreen==="timer"&&React.createElement('button',{style:{background:"#00C9A722",border:"1px solid #00C9A744",borderRadius:10,padding:"6px 10px",color:"#00C9A7",fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>goTo("timer")},"Timer")),
@@ -1411,8 +1450,8 @@ function CheatsheetScreen({ goTo, cheatsheet, setCheatsheet, prevScreen }) {
     phase==="error"&&React.createElement('div',{style:{padding:"24px 16px",textAlign:"center"}},React.createElement('div',{style:{color:"#FF4444",fontSize:14,fontWeight:700,marginBottom:8}},"Nao foi possivel ler"),React.createElement('div',{style:{color:"#666",fontSize:12,lineHeight:1.6}},err)),
     phase==="idle"&&React.createElement('div',{style:{padding:"32px 16px",textAlign:"center"}},React.createElement('div',{style:{fontSize:56,marginBottom:12}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14,lineHeight:1.7}},"Escolha uma foto do seu treino acima.")),
     phase==="done"&&wk&&React.createElement('div',{style:{padding:"12px 16px 60px",overflowY:"auto"}},
-      React.createElement('div',{style:{display:"flex",gap:12,alignItems:"center",marginBottom:16}},wk.preview&&React.createElement('img',{src:wk.preview,style:{width:52,height:52,objectFit:"cover",borderRadius:8,flexShrink:0}}),React.createElement('div',{style:{flex:1}},React.createElement('div',{style:{color:"#fff",fontSize:17,fontWeight:800}},wk.name),React.createElement('div',{style:{color:"#666",fontSize:12,marginTop:3}},(wk.items?.length||0)+" itens"))),
-      (wk.items||[]).map((item,i)=>React.createElement('div',{key:i,style:{background:"#13131A",borderRadius:10,padding:"11px 14px",marginBottom:7,borderLeft:"3px solid #00C9A7"}},React.createElement('div',{style:{color:"#fff",fontSize:14,lineHeight:1.5}},item))),
+      React.createElement('div',{style:{display:"flex",gap:12,alignItems:"center",marginBottom:16}},wk.preview&&React.createElement('img',{src:wk.preview,style:{width:52,height:52,objectFit:"cover",borderRadius:8,flexShrink:0}}),React.createElement('div',{style:{flex:1}},React.createElement('div',{style:{color:"#fff",fontSize:17,fontWeight:800}},wk.name),React.createElement('div',{style:{color:"#666",fontSize:12,marginTop:3}},(wk.items?.length||0)+" exercícios"))),
+      (wk.items||[]).map((item,i)=>React.createElement('div',{key:i,style:{background:"#13131A",borderRadius:12,padding:"14px 16px",marginBottom:8,borderLeft:"4px solid #00C9A7"}},React.createElement('div',{style:{color:"#fff",fontSize:20,fontWeight:600,lineHeight:1.5}},item))),
       wk.notes?React.createElement('div',{style:{background:"#0E1A10",border:"1px solid #00C9A744",borderRadius:10,padding:"12px 14px",marginTop:4}},React.createElement('div',{style:{color:"#00C9A7",fontSize:11,fontWeight:700,letterSpacing:2,marginBottom:6}},"NOTAS"),React.createElement('div',{style:{color:"#aaa",fontSize:13,lineHeight:1.6}},wk.notes)):null
     )
   );
