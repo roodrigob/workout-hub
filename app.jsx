@@ -46,7 +46,7 @@ const icons = {
 const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
 
 const BLOCK_LABELS    = { work:"TREINO", rest:"DESCANSO", warmup:"AQUEC.", cooldown:"COOL DOWN" };
-const BLOCK_COLOR_MAP = { work:"#FF6B35", rest:"#00C9A7", warmup:"#F7B731", cooldown:"#4361EE" };
+const BLOCK_COLOR_MAP = { work:"#4BB213", rest:"#00C9A7", warmup:"#F7B731", cooldown:"#4361EE" };
 
 const { useState, useEffect, useRef, useCallback } = React;
 
@@ -132,7 +132,7 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
         React.createElement('div', { style: { display:"flex", gap:8 } },
           React.createElement('div', { style: S.prBadge, onClick: () => goTo("history") },
             React.createElement(Icon, { d: icons.history, size: 20, stroke: 1.5 }),
-            React.createElement('span', { style: { color:"#fff", fontSize:12, fontWeight:700 } }, hist.length)
+            React.createElement('span', { style: S.prCount }, hist.length)
           ),
           React.createElement('div', { style: S.prBadge, onClick: () => goTo("pr") },
             React.createElement(Icon, { d: icons.trophy, size: 22, stroke: 1.5 }),
@@ -141,7 +141,7 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
         )
       ),
       React.createElement('div', { style: S.quickActions },
-        React.createElement('button', { style: { ...S.quickBtn, background:"#FF6B35" }, onClick: () => startWorkout(null) },
+        React.createElement('button', { style: { ...S.quickBtn, background:"#4BB213" }, onClick: () => startWorkout(null) },
           React.createElement(Icon, { d: icons.timer, size: 28, stroke: 1.5 }),
           React.createElement('span', null, "Cronômetro Livre")
         ),
@@ -401,7 +401,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const [done,     setDoneD]     = useState(false);
 
   const currentBlock = blocks[blockIdxRef.current] || blocks[0];
-  const accent       = BLOCK_COLOR_MAP[currentBlock?.type] || "#FF6B35";
+  const accent       = BLOCK_COLOR_MAP[currentBlock?.type] || "#4BB213";
 
   const setBlockIdx = (v) => { blockIdxRef.current = v; setBlockIdxD(v); };
   const setTimeLeft = (v) => { timeLeftRef.current = v; setTimeLeftD(v); };
@@ -626,7 +626,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
                 React.createElement('div', { style:{ fontSize:52, marginBottom:4 } }, "🏁"),
                 React.createElement('div', { style:{ color:"#fff", fontSize:24, fontWeight:700 } }, "CONCLUÍDO!"),
                 React.createElement('div', { style:{ color:"#888", fontSize:16, marginTop:6 } }, `${fmt(elapsed)} total`),
-                roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:18, fontWeight:700, marginTop:4 } }, `${roundCount} rounds`)
+                roundCount > 0 && React.createElement('div', { style:{ color:"#4BB213", fontSize:18, fontWeight:700, marginTop:4 } }, `${roundCount} rounds`)
               )
             : isLeadIn
               ? React.createElement('div', { style:{ textAlign:"center" } },
@@ -656,7 +656,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
                     React.createElement(Icon, { d: running ? icons.pause : icons.play, size: 28, fill: running ? "none" : "#fff", stroke: running ? 1.5 : 0 })
                   ),
                   !freeMode && React.createElement('div', { style: { ...S.timerSub, marginTop:4 } }, `${blockIdx+1} / ${blocks.length}`),
-                  roundCount > 0 && React.createElement('div', { style:{ color:"#FF6B35", fontSize:14, fontWeight:700, marginTop:2 } }, `${roundCount} rounds`)
+                  roundCount > 0 && React.createElement('div', { style:{ color:"#4BB213", fontSize:14, fontWeight:700, marginTop:2 } }, `${roundCount} rounds`)
                 )
         )
       )
@@ -675,8 +675,8 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
     // v7: Round counter (AMRAP)
     React.createElement('div', { style:{ display:"flex", justifyContent:"center", gap:12, marginBottom:12 } },
       React.createElement('button', {
-        style:{ background:"#1E1E2E", border:"1px solid #FF6B3544", borderRadius:12,
-                padding:"10px 24px", color:"#FF6B35", fontSize:14, fontWeight:700,
+        style:{ background:"#1E1E2E", border:"1px solid #4BB21344", borderRadius:12,
+                padding:"10px 24px", color:"#4BB213", fontSize:14, fontWeight:700,
                 cursor:"pointer", display:"flex", alignItems:"center", gap:8 },
         onClick: () => setRoundCount(c => c + 1)
       },
@@ -780,7 +780,7 @@ function PRScreen({ prs, savePrs, goTo }) {
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.screenHeaderTitle }, "PERSONAL RECORDS"),
-      React.createElement('button', { style:{ ...S.backBtn, color:"#FF6B35" }, onClick: () => setShowAdd(true) },
+      React.createElement('button', { style:{ ...S.backBtn, color:"#4BB213" }, onClick: () => setShowAdd(true) },
         React.createElement(Icon, { d: icons.add, size: 24, stroke: 2.5 })
       )
     ),
@@ -863,7 +863,7 @@ function PRModal({ onClose, savePr }) {
           units.map(u =>
             React.createElement('button', {
               key: u,
-              style:{ ...S.unitBtn, background: unit===u ? "#FF6B35" : "#1E1E2E", color: unit===u ? "#fff" : "#888" },
+              style:{ ...S.unitBtn, background: unit===u ? "#4BB213" : "#1E1E2E", color: unit===u ? "#fff" : "#888" },
               onClick: () => setUnit(u)
             }, u)
           )
@@ -1092,7 +1092,7 @@ function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
       }),
       React.createElement('div', { style: S.builderMeta },
         React.createElement('span', { style:{ color:"#888" } }, `${blocks.length} blocos`),
-        React.createElement('span', { style:{ color:"#FF6B35", fontWeight:700 } }, `${fmt(totalTime)} total`)
+        React.createElement('span', { style:{ color:"#4BB213", fontWeight:700 } }, `${fmt(totalTime)} total`)
       ),
       blocks.map((b, i) =>
         React.createElement('div', {
@@ -1453,7 +1453,7 @@ function QuickTextScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
   return React.createElement('div',{style:S.screen},
     React.createElement('div',{style:S.screenHeader},React.createElement('button',{style:S.backBtn,onClick:()=>goTo("home")},React.createElement(Icon,{d:icons.back,size:22})),React.createElement('div',{style:S.screenHeaderTitle},"DIGITAR TREINO"),React.createElement('div',{style:{width:32}})),
     React.createElement('div',{style:{padding:"0 16px 120px",overflowY:"auto"}},
-      React.createElement('div',{style:{position:"relative",marginBottom:8}},React.createElement('input',{style:{...S.input,fontSize:18,fontWeight:600,paddingRight:52,marginBottom:0},placeholder:"emom 20, tabata, amrap 10...",value:input,onChange:e=>{setInput(e.target.value);setResult(null);setError("");},onKeyDown:e=>{if(e.key==="Enter"){e.target.blur();parse();}},autoCapitalize:"none",autoCorrect:"off",spellCheck:false}),input.length>0&&React.createElement('button',{style:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#FF6B35",border:"none",borderRadius:10,padding:"6px 12px",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"},onClick:()=>parse()},"IR")),
+      React.createElement('div',{style:{position:"relative",marginBottom:8}},React.createElement('input',{style:{...S.input,fontSize:18,fontWeight:600,paddingRight:52,marginBottom:0},placeholder:"emom 20, tabata, amrap 10...",value:input,onChange:e=>{setInput(e.target.value);setResult(null);setError("");},onKeyDown:e=>{if(e.key==="Enter"){e.target.blur();parse();}},autoCapitalize:"none",autoCorrect:"off",spellCheck:false}),input.length>0&&React.createElement('button',{style:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#4BB213",border:"none",borderRadius:10,padding:"6px 12px",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"},onClick:()=>parse()},"IR")),
       error&&React.createElement('div',{style:{color:"#FF4444",fontSize:12,marginBottom:12}},error),
       !result&&React.createElement('div',null,React.createElement('div',{style:{color:"#888",fontSize:11,fontWeight:700,letterSpacing:2,marginBottom:10}},"EXEMPLOS"),examples.map((ex,i)=>React.createElement('button',{key:i,style:{width:"100%",background:"#13131A",border:"1px solid #2A2A3A",borderRadius:12,padding:"12px 14px",marginBottom:8,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"},onClick:()=>{setInput(ex.label);parse(ex.label);}},React.createElement('div',null,React.createElement('div',{style:{color:"#00C9A7",fontSize:14,fontWeight:700,textAlign:"left"}},ex.label),React.createElement('div',{style:{color:"#666",fontSize:12,marginTop:2}},ex.desc)),React.createElement(Icon,{d:icons.next,size:16,stroke:2})))),
       result&&React.createElement('div',null,
@@ -1549,7 +1549,7 @@ function HistoryScreen({ goTo, hist, saveHist }) {
                     )
                   ),
                   React.createElement('div', { style: { textAlign: "right" } },
-                    React.createElement('div', { style: { color: "#FF6B35", fontSize: 16, fontWeight: 800 } }, fmt(s.duration || 0)),
+                    React.createElement('div', { style: { color: "#4BB213", fontSize: 16, fontWeight: 800 } }, fmt(s.duration || 0)),
                     React.createElement('div', { style: { color: "#555", fontSize: 11 } },
                       new Date(s.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
                     )
@@ -1572,23 +1572,23 @@ const S = {
   greeting:{color:"#888",fontSize:14,marginBottom:4,letterSpacing:1},homeTitle:{color:"#fff",fontSize:42,fontWeight:900,lineHeight:1.05,letterSpacing:-1,whiteSpace:"pre-line"},
   prBadge:{background:"#1E1E2E",borderRadius:14,padding:"12px 14px",display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",color:"#F7B731"},prCount:{color:"#fff",fontSize:18,fontWeight:700},
   quickActions:{display:"flex",gap:12,padding:"0 16px 20px"},quickBtn:{flex:1,border:"none",borderRadius:18,padding:"20px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8,cursor:"pointer",color:"#fff",fontSize:14,fontWeight:700},
-  prCard:{margin:"0 16px 20px",background:"linear-gradient(135deg,#F7B731 0%,#FF6B35 100%)",borderRadius:18,padding:"16px 20px",cursor:"pointer"},prCardLabel:{fontSize:11,fontWeight:700,letterSpacing:2,color:"rgba(0,0,0,0.5)",marginBottom:4},prCardExercise:{fontSize:18,fontWeight:700,color:"#000",marginBottom:2},prCardValue:{fontSize:36,fontWeight:900,color:"#000",lineHeight:1},prCardUnit:{fontSize:16,fontWeight:400},prCardDate:{fontSize:12,color:"rgba(0,0,0,0.5)",marginTop:4},
-  section:{padding:"0 16px"},sectionHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12},sectionTitle:{color:"#666",fontSize:12,fontWeight:700,letterSpacing:2},sectionBtn:{background:"none",border:"1px solid #333",borderRadius:8,padding:"4px 10px",color:"#FF6B35",fontSize:13,cursor:"pointer"},
+  prCard:{margin:"0 16px 20px",background:"linear-gradient(135deg,#F7B731 0%,#4BB213 100%)",borderRadius:18,padding:"16px 20px",cursor:"pointer"},prCardLabel:{fontSize:11,fontWeight:700,letterSpacing:2,color:"rgba(0,0,0,0.5)",marginBottom:4},prCardExercise:{fontSize:18,fontWeight:700,color:"#000",marginBottom:2},prCardValue:{fontSize:36,fontWeight:900,color:"#000",lineHeight:1},prCardUnit:{fontSize:16,fontWeight:400},prCardDate:{fontSize:12,color:"rgba(0,0,0,0.5)",marginTop:4},
+  section:{padding:"0 16px"},sectionHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12},sectionTitle:{color:"#666",fontSize:12,fontWeight:700,letterSpacing:2},sectionBtn:{background:"none",border:"1px solid #333",borderRadius:8,padding:"4px 10px",color:"#4BB213",fontSize:13,cursor:"pointer"},
   empty:{color:"#444",fontSize:14,textAlign:"center",padding:"32px 0",lineHeight:1.8,whiteSpace:"pre-line"},
   workoutCard:{background:"#13131A",borderRadius:16,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"},workoutCardInfo:{flex:1},workoutCardName:{color:"#fff",fontSize:16,fontWeight:700,marginBottom:2},workoutCardMeta:{color:"#666",fontSize:12,marginBottom:6},blockDots:{display:"flex",gap:4},blockDot:{width:6,height:6,borderRadius:3},
   deleteBtn:{background:"none",border:"none",color:"#444",cursor:"pointer",padding:6,display:"flex"},
   editBtn:{background:"none",border:"1px solid #333",borderRadius:8,padding:"6px 8px",color:"#888",cursor:"pointer",display:"flex"},
-  startBtn:{background:"#FF6B35",border:"none",borderRadius:14,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"},
+  startBtn:{background:"#4BB213",border:"none",borderRadius:14,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"},
   timerHeader:{padding:"max(52px,env(safe-area-inset-top,52px)) 16px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"},timerTitle:{color:"#fff",fontSize:16,fontWeight:700,letterSpacing:1,flex:1,textAlign:"center"},
   backBtn:{background:"none",border:"none",color:"#888",cursor:"pointer",padding:4,display:"flex"},blockBar:{display:"flex",gap:3,padding:"0 16px 12px",height:10},blockBarItem:{height:4,borderRadius:2,minWidth:4,transition:"background 0.3s"},
   timerCircleWrapper:{position:"relative",width:260,height:260,margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center"},timerOverlay:{position:"absolute",top:0,left:0,right:0,bottom:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"},timerLabel:{fontSize:11,fontWeight:700,letterSpacing:3,marginBottom:4},timerDisplay:{color:"#fff",fontSize:56,fontWeight:900,letterSpacing:-2,lineHeight:1},timerSub:{color:"#555",fontSize:14,marginTop:8},
   timerControls:{display:"flex",alignItems:"center",justifyContent:"center",gap:24,marginBottom:16},controlBtn:{background:"#1E1E2E",border:"none",borderRadius:16,width:52,height:52,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff"},playBtn:{border:"none",borderRadius:28,width:72,height:72,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"background 0.3s"},
   addBlockRow:{display:"flex",gap:8,padding:"0 16px 12px",justifyContent:"center"},addBlockBtn:{background:"#0E0E16",border:"1px solid",borderRadius:10,padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center"},blockList:{padding:"0 16px",maxHeight:"40vh",overflowY:"auto",WebkitOverflowScrolling:"touch"},blockListItem:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",marginBottom:4,background:"#13131A",borderRadius:8,borderLeft:"3px solid"},
   screenHeader:{padding:"max(52px,env(safe-area-inset-top,52px)) 16px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"},screenHeaderTitle:{color:"#fff",fontSize:15,fontWeight:700,letterSpacing:2,flex:1,textAlign:"center"},
-  prEmpty:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",textAlign:"center"},prGroup:{marginBottom:24},prGroupTitle:{color:"#FF6B35",fontSize:12,fontWeight:700,letterSpacing:2,marginBottom:8},prRow:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#13131A",borderRadius:12,marginBottom:6},prRowLeft:{flex:1},prRowValue:{color:"#fff",fontSize:22,fontWeight:800},prRowUnit:{fontSize:13,fontWeight:400,color:"#888"},prRowNotes:{color:"#555",fontSize:12,marginTop:2},prRowDate:{color:"#555",fontSize:12},
-  builderMeta:{display:"flex",justifyContent:"space-between",marginBottom:14,fontSize:13},builderBlock:{display:"flex",alignItems:"center",gap:8,background:"#13131A",borderRadius:12,padding:"12px 10px",marginBottom:8},builderBlockAccent:{width:4,height:40,borderRadius:2,flexShrink:0},builderBlockBody:{flex:1},builderBlockType:{fontSize:10,fontWeight:700,letterSpacing:1,color:"#666"},builderBlockLabel:{fontSize:14,color:"#fff",fontWeight:600,marginTop:2},builderBlockTime:{color:"#FF6B35",fontSize:14,fontWeight:700,marginRight:4},arrowBtn:{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,padding:1,lineHeight:1},addBlockGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12},addTypeBtn:{background:"#0E0E16",border:"1px solid",borderRadius:12,padding:"12px",cursor:"pointer",textAlign:"center"},
+  prEmpty:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",textAlign:"center"},prGroup:{marginBottom:24},prGroupTitle:{color:"#4BB213",fontSize:12,fontWeight:700,letterSpacing:2,marginBottom:8},prRow:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#13131A",borderRadius:12,marginBottom:6},prRowLeft:{flex:1},prRowValue:{color:"#fff",fontSize:22,fontWeight:800},prRowUnit:{fontSize:13,fontWeight:400,color:"#888"},prRowNotes:{color:"#555",fontSize:12,marginTop:2},prRowDate:{color:"#555",fontSize:12},
+  builderMeta:{display:"flex",justifyContent:"space-between",marginBottom:14,fontSize:13},builderBlock:{display:"flex",alignItems:"center",gap:8,background:"#13131A",borderRadius:12,padding:"12px 10px",marginBottom:8},builderBlockAccent:{width:4,height:40,borderRadius:2,flexShrink:0},builderBlockBody:{flex:1},builderBlockType:{fontSize:10,fontWeight:700,letterSpacing:1,color:"#666"},builderBlockLabel:{fontSize:14,color:"#fff",fontWeight:600,marginTop:2},builderBlockTime:{color:"#4BB213",fontSize:14,fontWeight:700,marginRight:4},arrowBtn:{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,padding:1,lineHeight:1},addBlockGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12},addTypeBtn:{background:"#0E0E16",border:"1px solid",borderRadius:12,padding:"12px",cursor:"pointer",textAlign:"center"},
   modalOverlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-end",zIndex:100},modal:{background:"#13131A",borderRadius:"24px 24px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:430,margin:"0 auto",maxHeight:"85vh",overflowY:"auto"},modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20},modalTitle:{color:"#fff",fontSize:18,fontWeight:700},modalClose:{background:"none",border:"none",color:"#666",cursor:"pointer",display:"flex"},
-  input:{width:"100%",background:"#0A0A0F",border:"1px solid #2A2A3A",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:15,marginBottom:12,boxSizing:"border-box",outline:"none"},unitRow:{display:"flex",flexWrap:"wrap",gap:4},unitBtn:{border:"none",borderRadius:8,padding:"8px 8px",cursor:"pointer",fontSize:11,fontWeight:700,minWidth:36},submitBtn:{width:"100%",background:"#FF6B35",border:"none",borderRadius:14,padding:"16px",color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer",letterSpacing:1},typeBtn:{flex:1,border:"none",borderRadius:8,padding:"8px 4px",cursor:"pointer",fontWeight:700},durationBtn:{background:"#1E1E2E",border:"none",borderRadius:8,padding:"8px 10px",color:"#FF6B35",fontSize:12,fontWeight:700,cursor:"pointer"},
+  input:{width:"100%",background:"#0A0A0F",border:"1px solid #2A2A3A",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:15,marginBottom:12,boxSizing:"border-box",outline:"none"},unitRow:{display:"flex",flexWrap:"wrap",gap:4},unitBtn:{border:"none",borderRadius:8,padding:"8px 8px",cursor:"pointer",fontSize:11,fontWeight:700,minWidth:36},submitBtn:{width:"100%",background:"#4BB213",border:"none",borderRadius:14,padding:"16px",color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer",letterSpacing:1},typeBtn:{flex:1,border:"none",borderRadius:8,padding:"8px 4px",cursor:"pointer",fontWeight:700},durationBtn:{background:"#1E1E2E",border:"none",borderRadius:8,padding:"8px 10px",color:"#4BB213",fontSize:12,fontWeight:700,cursor:"pointer"},
   scanCta:{display:"flex",alignItems:"center",gap:12,margin:"0 16px 20px",background:"linear-gradient(135deg,#1A1A2E 0%,#16213E 100%)",border:"1px solid #A29BFE44",borderRadius:18,padding:"16px 18px",cursor:"pointer",color:"#888",width:"calc(100% - 32px)",textAlign:"left"},scanIdle:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"0 32px",textAlign:"center"},scanIllustration:{fontSize:72,marginBottom:20},
   scanLoading:{display:"flex",flexDirection:"column",alignItems:"center",minHeight:"70vh"},scanPreviewImg:{width:"100%",maxHeight:220,objectFit:"cover",borderRadius:"0 0 20px 20px",marginBottom:0},scanSpinnerWrap:{display:"flex",flexDirection:"column",alignItems:"center",marginTop:32},scanSpinner:{width:48,height:48,border:"4px solid #1E1E2E",borderTop:"4px solid #A29BFE",borderRadius:"50%",animation:"spin 0.9s linear infinite"},scanResultHeader:{display:"flex",gap:12,alignItems:"flex-start",marginBottom:16,marginTop:4},scanThumb:{width:72,height:72,objectFit:"cover",borderRadius:12,flexShrink:0},scanBlock:{display:"flex",alignItems:"center",gap:8,background:"#13131A",borderRadius:12,padding:"12px 10px",marginBottom:8},scanActions:{position:"fixed",bottom:0,left:0,right:0,display:"flex",gap:10,padding:"12px 16px 32px",background:"#0A0A0F",borderTop:"1px solid #1E1E2E",maxWidth:430,margin:"0 auto"},
 };
