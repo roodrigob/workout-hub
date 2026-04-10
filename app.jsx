@@ -1,8 +1,10 @@
 // ─── Storage Helpers ────────────────────────────────────────────────────────
 const STORAGE_KEYS = { prs: "workout_prs", workouts: "workout_templates" };
+
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
 }
+
 function save(key, data) {
   try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
 }
@@ -41,61 +43,61 @@ const { useState, useEffect, useRef, useCallback } = React;
 //  MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════
 function App() {
-  const [screen, setScreen]         = useState("home");
+  const [screen, setScreen]           = useState("home");
   const [prevScreen, setPrevScreen]   = useState("home");
-  const [prs, setPrs]               = useState(() => load(STORAGE_KEYS.prs));
-  const [workouts, setWorkouts]     = useState(() => load(STORAGE_KEYS.workouts));
+  const [prs, setPrs]                 = useState(() => load(STORAGE_KEYS.prs));
+  const [workouts, setWorkouts]       = useState(() => load(STORAGE_KEYS.workouts));
   const [activeWorkout, setActiveWorkout] = useState(null);
+  const [cheatsheet, setCheatsheet]   = useState(null);
 
-  const savePrs     = (d) => { setPrs(d);      save(STORAGE_KEYS.prs, d); };
-  const saveWorkouts= (d) => { setWorkouts(d); save(STORAGE_KEYS.workouts, d); };
-  const startWorkout= (w) => { setActiveWorkout(w); setScreen("timer"); };
+  const savePrs = (d) => { setPrs(d); save(STORAGE_KEYS.prs, d); };
+  const saveWorkouts = (d) => { setWorkouts(d); save(STORAGE_KEYS.workouts, d); };
+  const startWorkout = (w) => { setActiveWorkout(w); goTo("timer"); };
 
-  // Global cheatsheet — load anywhere, view in timer
-  const [cheatsheet, setCheatsheet] = useState(null);
+  const goTo = (s) => {
+    setPrevScreen(screen);
+    setScreen(s);
+  };
 
-  if (screen === "home")    return React.createElement(HomeScreen,    { setScreen: (s) => { setPrevScreen("home"); setScreen(s); }, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet });
-  if (screen === "timer")   return React.createElement(TimerScreen,   { workout: activeWorkout, setScreen: (s) => { setPrevScreen("timer"); setScreen(s); }, savePr: (pr) => savePrs([pr, ...prs]), cheatsheet });
-  if (screen === "cheat")   return React.createElement(CheatsheetScreen, { setScreen, cheatsheet, setCheatsheet, prevScreen });
-  if (screen === "pr")      return React.createElement(PRScreen,      { prs, savePrs, setScreen });
-  if (screen === "builder") return React.createElement(BuilderScreen, { workouts, saveWorkouts, setScreen });
-  if (screen === "scan")    return React.createElement(ScanScreen,    { setScreen, saveWorkouts, workouts, startWorkout });
-  if (screen === "quick")   return React.createElement(QuickTextScreen, { setScreen, saveWorkouts, workouts, startWorkout });
+  if (screen === "home")    return React.createElement(HomeScreen,    { goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet });
+  if (screen === "timer")   return React.createElement(TimerScreen,   { workout: activeWorkout, goTo, savePr: (pr) => savePrs([pr, ...prs]), cheatsheet });
+  if (screen === "cheat")   return React.createElement(CheatsheetScreen, { goTo, cheatsheet, setCheatsheet, prevScreen });
+  if (screen === "pr")      return React.createElement(PRScreen,      { prs, savePrs, goTo });
+  if (screen === "builder") return React.createElement(BuilderScreen, { workouts, saveWorkouts, goTo });
+  if (screen === "scan")    return React.createElement(ScanScreen,    { goTo, saveWorkouts, workouts, startWorkout });
+  if (screen === "quick")   return React.createElement(QuickTextScreen, { goTo, saveWorkouts, workouts, startWorkout });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  HOME
 // ═══════════════════════════════════════════════════════════════════════════
-function HomeScreen({ setScreen, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet }) {
+function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet }) {
   const latestPr = prs[0];
   return (
     React.createElement('div', { style: S.screen },
-      // Header
       React.createElement('div', { style: S.homeHeader },
         React.createElement('div', null,
           React.createElement('div', { style: S.greeting }, "Bom treino 💪"),
           React.createElement('div', { style: S.homeTitle }, "WORKOUT\nHUB")
         ),
-        React.createElement('div', { style: S.prBadge, onClick: () => setScreen("pr") },
+        React.createElement('div', { style: S.prBadge, onClick: () => goTo("pr") },
           React.createElement(Icon, { d: icons.trophy, size: 22, stroke: 1.5 }),
           React.createElement('span', { style: S.prCount }, prs.length)
         )
       ),
-      // Quick Actions
       React.createElement('div', { style: S.quickActions },
         React.createElement('button', { style: { ...S.quickBtn, background:"#FF6B35" }, onClick: () => startWorkout(null) },
           React.createElement(Icon, { d: icons.timer, size: 28, stroke: 1.5 }),
           React.createElement('span', null, "Cronômetro Livre")
         ),
-        React.createElement('button', { style: { ...S.quickBtn, background:"#4361EE" }, onClick: () => setScreen("builder") },
+        React.createElement('button', { style: { ...S.quickBtn, background:"#4361EE" }, onClick: () => goTo("builder") },
           React.createElement(Icon, { d: icons.add, size: 28, stroke: 2 }),
           React.createElement('span', null, "Novo Treino")
         )
       ),
-      // Scan CTA
       React.createElement('button', {
         style: S.scanCta,
-        onClick: () => setScreen("scan")
+        onClick: () => goTo("scan")
       },
         React.createElement('span', { style:{ fontSize:22 } }, "\u{1F4F8}"),
         React.createElement('div', { style:{ flex:1 } },
@@ -104,13 +106,12 @@ function HomeScreen({ setScreen, workouts, prs, startWorkout, saveWorkouts, chea
         ),
         React.createElement(Icon, { d: icons.next, size: 18, stroke: 2 })
       ),
-      // Cheat + Quick row
       React.createElement('div', { style:{ display:"flex", gap:10, padding:"0 16px 12px", marginTop:-8 } },
         React.createElement('button', {
           style:{ flex:1, background:"linear-gradient(135deg,#0A1A10,#0D1F15)", border:"1px solid #00C9A744",
                   borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column",
                   alignItems:"flex-start", gap:6, cursor:"pointer", color:"#fff" },
-          onClick: () => setScreen("cheat")
+          onClick: () => goTo("cheat")
         },
           React.createElement('span', { style:{ fontSize:20 } }, "\u{1F4CB}"),
           React.createElement('span', { style:{ fontSize:13, fontWeight:700 } }, "Consultar"),
@@ -120,31 +121,18 @@ function HomeScreen({ setScreen, workouts, prs, startWorkout, saveWorkouts, chea
           style:{ flex:1, background:"linear-gradient(135deg,#0A1A10,#0D1F15)", border:"1px solid #00C9A744",
                   borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column",
                   alignItems:"flex-start", gap:6, cursor:"pointer", color:"#fff" },
-          onClick: () => setScreen("quick")
+          onClick: () => goTo("quick")
         },
           React.createElement('span', { style:{ fontSize:20 } }, "\u2328\uFE0F"),
           React.createElement('span', { style:{ fontSize:13, fontWeight:700 } }, "Digitar"),
           React.createElement('span', { style:{ fontSize:11, color:"#00C9A7" } }, "emom, tabata...")
         )
       ),
-      // OLD Quick Text CTA kept as hidden — replaced above
-      false && React.createElement('button', {
-        style: { ...S.scanCta, borderColor:"#00C9A744", background:"linear-gradient(135deg,#0A1A10 0%,#0D1F15 100%)", marginTop:-8 },
-        onClick: () => setScreen("quick")
-      },
-        React.createElement('span', { style:{ fontSize:22 } }, "\u2328\uFE0F"),
-        React.createElement('div', { style:{ flex:1 } },
-          React.createElement('div', { style:{ color:"#fff", fontSize:14, fontWeight:700 } }, "Digitar Treino"),
-          React.createElement('div', { style:{ color:"#00C9A7", fontSize:12, marginTop:2 } }, "emom 20, tabata, amrap 10...")
-        ),
-        React.createElement(Icon, { d: icons.next, size: 18, stroke: 2 })
-      ),
-      // Cheatsheet banner (if loaded)
       cheatsheet && React.createElement('div', {
         style:{ margin:"0 16px 16px", background:"linear-gradient(135deg,#0A1A10,#0D1F15)",
                 border:"1px solid #00C9A766", borderRadius:16, padding:"12px 16px",
                 display:"flex", gap:12, alignItems:"center", cursor:"pointer" },
-        onClick: () => setScreen("cheat")
+        onClick: () => goTo("cheat")
       },
         cheatsheet.preview && React.createElement('img', {
           src: cheatsheet.preview,
@@ -163,8 +151,7 @@ function HomeScreen({ setScreen, workouts, prs, startWorkout, saveWorkouts, chea
           onClick: (e) => { e.stopPropagation(); setCheatsheet(null); }
         }, "✕")
       ),
-      // Latest PR
-      latestPr && React.createElement('div', { style: S.prCard, onClick: () => setScreen("pr") },
+      latestPr && React.createElement('div', { style: S.prCard, onClick: () => goTo("pr") },
         React.createElement('div', { style: S.prCardLabel }, "ÚLTIMO PR"),
         React.createElement('div', { style: S.prCardExercise }, latestPr.exercise),
         React.createElement('div', { style: S.prCardValue },
@@ -173,11 +160,10 @@ function HomeScreen({ setScreen, workouts, prs, startWorkout, saveWorkouts, chea
         ),
         React.createElement('div', { style: S.prCardDate }, new Date(latestPr.date).toLocaleDateString("pt-BR"))
       ),
-      // Saved Workouts
       React.createElement('div', { style: S.section },
         React.createElement('div', { style: S.sectionHeader },
           React.createElement('span', { style: S.sectionTitle }, "TREINOS SALVOS"),
-          React.createElement('button', { style: S.sectionBtn, onClick: () => setScreen("builder") }, "+ Criar")
+          React.createElement('button', { style: S.sectionBtn, onClick: () => goTo("builder") }, "+ Criar")
         ),
         workouts.length === 0
           ? React.createElement('div', { style: S.empty }, "Nenhum treino salvo ainda.\nCrie o seu primeiro! 🔥")
@@ -213,7 +199,7 @@ function WorkoutCard({ workout, onStart, onDelete }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  AUDIO ENGINE — single AudioContext, unlocked on first tap, scheduled ahead
+//  AUDIO ENGINE
 // ═══════════════════════════════════════════════════════════════════════════
 let AC = null;
 let AC_UNLOCKED = false;
@@ -223,12 +209,9 @@ function getAC() {
   return AC;
 }
 
-// Called synchronously inside the Play button onClick
 function unlockAudio() {
   const ctx = getAC();
-  // iOS needs resume() + a real sound scheduled from inside the gesture
   ctx.resume().then(() => {
-    // Play a 1ms silent tone — this is what actually unlocks iOS
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     g.gain.value = 0.001;
@@ -238,7 +221,6 @@ function unlockAudio() {
   });
 }
 
-// Schedule a tone at ctx.currentTime + offset
 function tone(freq, dur, vol, type, offset) {
   try {
     const ctx = getAC();
@@ -256,20 +238,11 @@ function tone(freq, dur, vol, type, offset) {
   } catch(e) { console.warn("tone err", e); }
 }
 
-// tick: Sino Alto
 function beepTick()    { tone(1046, 0.12, 0.5, "sine", 0.01); }
-// go: Buzina
 function beepGo()      { tone(440, 0.4, 0.7, "sawtooth", 0.01); }
-// end: Flash
 function beepEndTick() { tone(2000, 0.04, 0.4, "sine", 0.01); }
-// done: Nivel Up
 function beepDone()    { [0,1,2,3].forEach(i => tone(330+i*110, 0.09, 0.5, "sine", 0.01+i*0.08)); }
 
-
-// ─── Speech synthesis (iOS-safe) ─────────────────────────────────────────
-// iOS requires speechSynthesis to be triggered inside a user gesture at least
-// once. After that, speak() works from setInterval as long as the context was
-// unlocked. We queue utterances to avoid overlapping speech.
 let _speechUnlocked = false;
 
 function unlockSpeech() {
@@ -282,7 +255,6 @@ function unlockSpeech() {
 
 function speak(text) {
   if (!window.speechSynthesis) return;
-  // Cancel any ongoing speech so messages don't queue up
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang   = "en-US";
@@ -295,14 +267,13 @@ function speak(text) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  TIMER
 // ═══════════════════════════════════════════════════════════════════════════
-function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
-  const LEAD_IN = 10; // seconds before actual timer starts
+function TimerScreen({ workout, goTo, savePr, cheatsheet }) {
+  const LEAD_IN = 10;
 
   const [blocks, setBlocks]   = useState(() => workout ? [...workout.blocks] : [{ type:"work", duration:60, label:"Treino Livre" }]);
   const [freeMode]            = useState(!workout);
   const [showPr, setShowPr]   = useState(false);
 
-  // All timer state in refs so tick() always reads fresh values
   const blockIdxRef  = useRef(0);
   const timeLeftRef  = useRef(null);
   const elapsedRef   = useRef(0);
@@ -313,7 +284,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
   const cuesFiredRef = useRef(new Set());
   const intervalRef  = useRef(null);
 
-  // React display state — only for re-renders
   const [blockIdx, setBlockIdxD] = useState(0);
   const [timeLeft, setTimeLeftD] = useState(null);
   const [elapsed,  setElapsedD]  = useState(0);
@@ -324,7 +294,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
   const currentBlock = blocks[blockIdxRef.current] || blocks[0];
   const accent       = BLOCK_COLOR_MAP[currentBlock?.type] || "#FF6B35";
 
-  // Sync ref + display state together
   const setBlockIdx = (v) => { blockIdxRef.current = v; setBlockIdxD(v); };
   const setTimeLeft = (v) => { timeLeftRef.current = v; setTimeLeftD(v); };
   const setElapsed  = (v) => { elapsedRef.current  = v; setElapsedD(v);  };
@@ -337,7 +306,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
       setTimeLeft(currentBlock.duration);
   }, [freeMode, currentBlock]);
 
-  // goNextRef — stable, always reads latest blocks via ref
   const blocksRef  = useRef(blocks);
   blocksRef.current = blocks;
 
@@ -357,10 +325,8 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
     }
   }, []);
 
-  // tickRef holds latest tick logic — interval never needs to be re-registered
   const tickRef = useRef(null);
   tickRef.current = () => {
-    // Lead-in phase
     if (leadInRef.current > 0) {
       const n = leadInRef.current - 1;
       setLeadIn(n);
@@ -368,10 +334,8 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
       if (n === 0) { beepGo(); leadDoneRef.current = true; }
       return;
     }
-    // Free mode
     if (freeMode) { setElapsed(elapsedRef.current + 1); return; }
 
-    // Structured mode
     const prev  = timeLeftRef.current ?? 0;
     const next  = prev - 1;
     const fired = cuesFiredRef.current;
@@ -381,7 +345,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
 
     setElapsed(elapsedRef.current + 1);
 
-    // Audio cues — safe here, completely outside React setState
     if (next > 0 && next <= 3 && !fired.has("e"+next)) {
       fired.add("e"+next); beepEndTick();
     }
@@ -397,7 +360,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
     setTimeLeft(next);
   };
 
-  // Single stable interval — never re-created, tickRef always up to date
   useEffect(() => {
     if (!running) { clearInterval(intervalRef.current); return; }
     clearInterval(intervalRef.current);
@@ -407,11 +369,8 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
 
   const toggleRun = () => {
     if (doneRef.current) return;
-    // iOS REQUIRES audio to be triggered synchronously in the gesture handler.
-    // We play a real (audible) tone here — this permanently unlocks the AC
-    // for all future scheduled sounds from setInterval.
     unlockAudio();
-    tone(440, 0.001, 0.001, "sine", 0.01); // near-silent unlock tone
+    tone(440, 0.001, 0.001, "sine", 0.01);
     unlockSpeech();
     if (!runningRef.current) {
       if (leadInRef.current === 0 && !leadDoneRef.current) setLeadIn(LEAD_IN);
@@ -440,7 +399,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
 
   const R = 100, C = 2 * Math.PI * R;
 
-  // During lead-in, animate circle based on lead-in progress
   const leadProgress   = leadIn > 0 ? 1 - (leadIn / LEAD_IN) : 0;
   const blockProgress  = freeMode ? 0 : currentBlock
     ? 1 - (timeLeft ?? currentBlock.duration) / currentBlock.duration
@@ -448,22 +406,20 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
   const circleProgress = leadIn > 0 ? leadProgress : blockProgress;
   const dash           = C * (1 - circleProgress);
 
-  // What to show in the circle
   const isLeadIn  = leadIn > 0;
-  const leadColor = "#A29BFE";  // purple for countdown
+  const leadColor = "#A29BFE";
 
   const displayAccent = isLeadIn ? leadColor : accent;
   const isEndingTick  = !isLeadIn && !freeMode && timeLeft !== null && timeLeft <= 3 && timeLeft > 0 && running;
 
   return React.createElement('div', { style: { ...S.screen, background:"#0A0A0F" } },
-    // Header
     React.createElement('div', { style: S.timerHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => setScreen("home") },
+      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.timerTitle }, workout ? workout.name.toUpperCase() : "LIVRE"),
       React.createElement('div', { style:{ display:"flex", gap:4 } },
-        React.createElement('button', { style: { ...S.backBtn, color: cheatsheet ? "#00C9A7" : "#555" }, onClick: () => setScreen("cheat") },
+        React.createElement('button', { style: { ...S.backBtn, color: cheatsheet ? "#00C9A7" : "#555" }, onClick: () => goTo("cheat") },
           React.createElement('span', { style:{ fontSize:18, position:"relative" } },
             "\u{1F4CB}",
             cheatsheet && React.createElement('span', {
@@ -477,7 +433,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
         )
       )
     ),
-    // Block bar
     !freeMode && React.createElement('div', { style: S.blockBar },
       blocks.map((b, i) =>
         React.createElement('div', {
@@ -491,7 +446,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
         })
       )
     ),
-    // Circle
     React.createElement('div', { style: S.timerCircleWrapper },
       React.createElement('svg', { width: 260, height: 260, viewBox:"0 0 240 240" },
         React.createElement('circle', { cx:120, cy:120, r:R, fill:"none", stroke:"#1E1E2E", strokeWidth:12 }),
@@ -516,7 +470,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
               React.createElement('div', { style:{ color:"#888", fontSize:13, marginTop:4 } }, `${fmt(elapsed)} total`)
             )
           : isLeadIn
-            // ── Lead-in display ──
             ? React.createElement('div', { style:{ textAlign:"center" } },
                 React.createElement('div', { style:{ color: leadColor, fontSize:11, fontWeight:700, letterSpacing:3, marginBottom:8 } }, "PREPARAR"),
                 React.createElement('div', { style:{
@@ -527,7 +480,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
                 }}, String(leadIn)),
                 React.createElement('div', { style:{ color:"#555", fontSize:13, marginTop:8 } }, "começa em breve...")
               )
-            // ── Normal display ──
             : React.createElement(React.Fragment, null,
                 React.createElement('div', { style:{ ...S.timerLabel, color: isEndingTick ? "#FF4444" : accent } },
                   freeMode ? "LIVRE" : (currentBlock?.label || BLOCK_LABELS[currentBlock?.type] || "TREINO")
@@ -544,7 +496,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
               )
       )
     ),
-    // Controls
     React.createElement('div', { style: S.timerControls },
       React.createElement('button', { style: S.controlBtn, onClick: reset },
         React.createElement(Icon, { d: icons.stop, size: 22 })
@@ -561,7 +512,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
           )
         : React.createElement('div', { style:{ width:52 } })
     ),
-    // Add blocks (free mode)
     !workout && React.createElement('div', { style: S.addBlockRow },
       ["work","rest","warmup"].map(t =>
         React.createElement('button', {
@@ -575,7 +525,6 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
         )
       )
     ),
-    // Block list
     !freeMode && React.createElement('div', { style: S.blockList },
       blocks.map((b, i) =>
         React.createElement('div', {
@@ -600,7 +549,7 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  PR SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
-function PRScreen({ prs, savePrs, setScreen }) {
+function PRScreen({ prs, savePrs, goTo }) {
   const [showAdd, setShowAdd] = useState(false);
   const grouped = prs.reduce((acc, pr) => {
     const g = pr.exercise || "Geral";
@@ -611,7 +560,7 @@ function PRScreen({ prs, savePrs, setScreen }) {
 
   return React.createElement('div', { style: S.screen },
     React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => setScreen("home") },
+      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.screenHeaderTitle }, "PERSONAL RECORDS"),
@@ -717,24 +666,20 @@ function PRModal({ onClose, savePr }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  BLOCK EDIT MODAL  (with typed input + quick buttons)
+//  BLOCK EDIT MODAL
 // ═══════════════════════════════════════════════════════════════════════════
 function BlockEditModal({ block, onChange, onConfirm, onClose }) {
-  // "mm:ss" string for the text input
   const toStr = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
   const [inputVal, setInputVal] = useState(() => toStr(block.duration));
   const [inputErr, setInputErr] = useState(false);
 
-  // Parse "mm:ss", "m:ss", or plain seconds / minutes like "90" or "1:30"
   const parse = (raw) => {
     const s = raw.trim();
-    // mm:ss
     const colonMatch = s.match(/^(\d{1,3}):(\d{2})$/);
     if (colonMatch) {
       const total = parseInt(colonMatch[1]) * 60 + parseInt(colonMatch[2]);
       return total >= 1 ? total : null;
     }
-    // plain number → treat as seconds
     const num = parseInt(s);
     if (!isNaN(num) && num >= 1) return num;
     return null;
@@ -753,7 +698,6 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
     setInputErr(false);
   };
 
-  // Keep input in sync when quick buttons change duration
   const handleBlur = () => applyInput(inputVal);
   const handleKey  = (e) => { if (e.key === "Enter") { applyInput(inputVal); e.target.blur(); } };
 
@@ -761,24 +705,18 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
 
   return React.createElement('div', { style: S.modalOverlay },
     React.createElement('div', { style: S.modal },
-      // Header
       React.createElement('div', { style: S.modalHeader },
         React.createElement('span', { style: S.modalTitle }, "Editar Bloco"),
         React.createElement('button', { style: S.modalClose, onClick: onClose },
           React.createElement(Icon, { d: icons.close, size: 20 })
         )
       ),
-      // Label
       React.createElement('input', {
         style: S.input, placeholder:"Nome do bloco",
         value: block.label,
         onChange: e => onChange({ ...block, label: e.target.value })
       }),
-
-      // ── Duration section ──────────────────────────────────────────────
       React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } }, "DURAÇÃO"),
-
-      // Big typed input (mm:ss)
       React.createElement('div', { style:{ position:"relative", marginBottom: inputErr ? 4 : 12 } },
         React.createElement('input', {
           style:{
@@ -803,8 +741,6 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
       inputErr && React.createElement('div', { style:{ color:"#FF4444", fontSize:11, marginBottom:8, textAlign:"center" } },
         "Formato inválido. Use mm:ss ou segundos (ex: 90)"
       ),
-
-      // Quick adjust buttons
       React.createElement('div', { style:{ display:"flex", gap:5, flexWrap:"wrap", justifyContent:"center", marginBottom:16 } },
         quickDeltas.map(d =>
           React.createElement('button', {
@@ -820,8 +756,6 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
           }, (d > 0 ? "+" : "") + (Math.abs(d) >= 60 ? `${d/60 > 0 ? "+" : ""}${d/60}min` : `${d}s`))
         )
       ),
-
-      // Type selector
       React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } }, "TIPO"),
       React.createElement('div', { style:{ display:"flex", gap:6, marginBottom:20 } },
         ["work","rest","warmup","cooldown"].map(t =>
@@ -837,7 +771,6 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
           }, BLOCK_LABELS[t])
         )
       ),
-
       React.createElement('button', { style: S.submitBtn, onClick: onConfirm }, "CONFIRMAR")
     )
   );
@@ -846,7 +779,7 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  BUILDER
 // ═══════════════════════════════════════════════════════════════════════════
-function BuilderScreen({ workouts, saveWorkouts, setScreen }) {
+function BuilderScreen({ workouts, saveWorkouts, goTo }) {
   const [name, setName]       = useState("");
   const [blocks, setBlocks]   = useState([
     { type:"warmup",  duration:300, label:"Aquecimento" },
@@ -871,21 +804,21 @@ function BuilderScreen({ workouts, saveWorkouts, setScreen }) {
   const moveUp   = (i) => { if (i===0) return; const b=[...blocks]; [b[i-1],b[i]]=[b[i],b[i-1]]; setBlocks(b); };
   const moveDown = (i) => { if (i===blocks.length-1) return; const b=[...blocks]; [b[i],b[i+1]]=[b[i+1],b[i]]; setBlocks(b); };
 
-  const save = () => {
+  const handleSave = () => {
     if (!name || blocks.length === 0) return;
     saveWorkouts([...workouts, { name, blocks }]);
-    setScreen("home");
+    goTo("home");
   };
 
   return React.createElement('div', { style: S.screen },
     React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => setScreen("home") },
+      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.screenHeaderTitle }, "CRIAR TREINO"),
       React.createElement('button', {
         style:{ ...S.backBtn, color:"#00C9A7", fontSize:14, fontWeight:700 },
-        onClick: save
+        onClick: handleSave
       }, "SALVAR")
     ),
     React.createElement('div', { style:{ padding:"0 16px 120px", overflowY:"auto" } },
@@ -931,7 +864,6 @@ function BuilderScreen({ workouts, saveWorkouts, setScreen }) {
         )
       )
     ),
-
     editBlock && React.createElement(BlockEditModal, {
       block: editBlock,
       onChange: setEditBlock,
@@ -943,21 +875,20 @@ function BuilderScreen({ workouts, saveWorkouts, setScreen }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  SCAN SCREEN  — photo → AI → workout blocks
+//  SCAN SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
-function ScanScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
-  const [phase, setPhase]       = useState("idle"); // idle | loading | preview | error
-  const [preview, setPreview]   = useState(null);   // data-url of chosen image
-  const [result, setResult]     = useState(null);   // { name, blocks }
+function ScanScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
+  const [phase, setPhase]       = useState("idle");
+  const [preview, setPreview]   = useState(null);
+  const [result, setResult]     = useState(null);
   const [errMsg, setErrMsg]     = useState("");
   const [editIdx, setEditIdx]   = useState(null);
   const [editBlock, setEditBlock] = useState(null);
-
+  const fileRef = useRef(null);
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // show preview
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const dataUrl = ev.target.result;
@@ -988,9 +919,9 @@ Retorne APENAS um JSON válido (sem markdown, sem texto extra) com este formato 
 
 Regras OBRIGATÓRIAS:
 - Foque SOMENTE em tempos explícitos: "1:30", "90s", "2 min", "Rest 1:30", etc.
-- Se houver N rounds/sets repetindo o mesmo padrão tempo-trabalho + tempo-descanso, crie N pares de blocos (work + rest). Ex: "6 sets of 1:30 work, rest 1:30" = 6x bloco work 90s + 6x bloco rest 90s = 12 blocos.
+- Se houver N rounds/sets repetindo o mesmo padrão tempo-trabalho + tempo-descanso, crie N pares de blocos (work + rest).
 - NÃO adicione aquecimento automático. Só inclua warmup se estiver explicitamente na imagem com tempo definido.
-- NÃO invente tempos baseados em repetições ou séries sem tempo. Se não houver tempo explícito para um exercício, ignore-o.
+- NÃO invente tempos baseados em repetições ou séries sem tempo.
 - NÃO inclua observações, pesos, notas ou instruções — só o que for tempo.
 - "type": use "work" para blocos de esforço, "rest" para descanso, "cooldown" para volta à calma.
 - "duration" em segundos (número inteiro). Ex: 1:30 = 90, 2:00 = 120.
@@ -998,7 +929,6 @@ Regras OBRIGATÓRIAS:
 - Mínimo 1 bloco, máximo 50.`;
 
     try {
-      // Call our Netlify proxy — avoids CORS/Safari restrictions
       const res = await fetch(window.location.hostname.includes("netlify") ? "/.netlify/functions/analyze" : "/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1027,7 +957,6 @@ Regras OBRIGATÓRIAS:
 
       const raw  = (data.content || []).map(c => c.text || "").join("").trim();
       if (!raw) throw new Error("Servidor não retornou conteúdo. Verifique a API key no Netlify.");
-      // strip possible markdown fences
       const clean = raw.replace(/^```[\w]*\n?/,"").replace(/\n?```$/,"").trim();
       let parsed;
       try { parsed = JSON.parse(clean); } catch { throw new Error("IA não retornou JSON válido: " + raw.slice(0,120)); }
@@ -1035,7 +964,6 @@ Regras OBRIGATÓRIAS:
       if (!parsed.blocks || !Array.isArray(parsed.blocks) || parsed.blocks.length === 0)
         throw new Error("Nenhum bloco identificado na imagem.");
 
-      // sanitize blocks
       const validTypes = ["work","rest","warmup","cooldown"];
       parsed.blocks = parsed.blocks.map(b => ({
         type:     validTypes.includes(b.type) ? b.type : "work",
@@ -1060,7 +988,7 @@ Regras OBRIGATÓRIAS:
   const saveOnly = () => {
     if (!result) return;
     saveWorkouts([...workouts, result]);
-    setScreen("home");
+    goTo("home");
   };
 
   const openEdit = (i) => { setEditIdx(i); setEditBlock({ ...result.blocks[i] }); };
@@ -1074,19 +1002,18 @@ Regras OBRIGATÓRIAS:
   const totalTime = result ? result.blocks.reduce((a,b) => a + b.duration, 0) : 0;
 
   return React.createElement('div', { style: S.screen },
-    // Header
     React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => setScreen("home") },
+      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.screenHeaderTitle }, "ESCANEAR TREINO"),
       React.createElement('div', { style:{ width:32 } })
     ),
 
-    // Input sempre visivel
     React.createElement('div', { style:{ padding:"0 16px 16px" } },
       React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } }, "FOTO DO TREINO"),
       React.createElement('input', {
+        ref: fileRef,
         type:"file", accept:"image/*", onChange: handleFile,
         style:{ display:"block", width:"100%", padding:"13px 14px",
                 background:"#13131A", border:"1.5px dashed #4361EE",
@@ -1095,22 +1022,22 @@ Regras OBRIGATÓRIAS:
       })
     ),
 
-
-    // ── IDLE ─────────────────────────────────────────────────────────────
     phase === "idle" && React.createElement('div', { style: S.scanIdle },
       React.createElement('div', { style: S.scanIllustration }, "📋"),
       React.createElement('div', { style:{ color:"#fff", fontSize:20, fontWeight:800, marginBottom:8 } }, "Foto do seu treino"),
       React.createElement('div', { style:{ color:"#666", fontSize:14, lineHeight:1.7, textAlign:"center", maxWidth:260, marginBottom:32 } },
         "Tire uma foto de qualquer treino: papel, lousa, print de app, planilha... A IA vai ler e montar os blocos automaticamente."
       ),
-      React.createElement('button', { style: S.scanPickBtn, onClick: () => setShowPicker(true) },
+      React.createElement('button', {
+        style: S.scanPickBtn,
+        onClick: () => { if (fileRef.current) fileRef.current.click(); }
+      },
         React.createElement('span', { style:{ fontSize:22 } }, "\u{1F4F7}"),
         React.createElement('span', null, "Escolher Foto")
       ),
       React.createElement('div', { style:{ color:"#444", fontSize:12, marginTop:16 } }, "Câmera ou galeria")
     ),
 
-    // ── LOADING ───────────────────────────────────────────────────────────
     phase === "loading" && React.createElement('div', { style: S.scanLoading },
       preview && React.createElement('img', {
         src: preview,
@@ -1124,7 +1051,6 @@ Regras OBRIGATÓRIAS:
       )
     ),
 
-    // ── ERROR ─────────────────────────────────────────────────────────────
     phase === "error" && React.createElement('div', { style: S.scanIdle },
       React.createElement('div', { style:{ fontSize:48, marginBottom:12 } }, "\u26A0\uFE0F"),
       React.createElement('div', { style:{ color:"#FF4444", fontSize:16, fontWeight:700, marginBottom:8 } }, "Não foi possível analisar"),
@@ -1132,9 +1058,7 @@ Regras OBRIGATÓRIAS:
       React.createElement('div', { style:{ color:"#555", fontSize:13 } }, "Toque no campo acima para tentar novamente"),
     ),
 
-    // ── PREVIEW ───────────────────────────────────────────────────────────
     phase === "preview" && result && React.createElement('div', { style:{ padding:"0 16px 120px" } },
-      // Thumb + name
       React.createElement('div', { style: S.scanResultHeader },
         preview && React.createElement('img', { src: preview, style: S.scanThumb, alt:"" }),
         React.createElement('div', { style:{ flex:1 } },
@@ -1149,7 +1073,6 @@ Regras OBRIGATÓRIAS:
         )
       ),
 
-      // Block list
       React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:10 } }, "BLOCOS DETECTADOS"),
       result.blocks.map((b, i) =>
         React.createElement('div', { key:i, style: S.scanBlock },
@@ -1165,13 +1088,11 @@ Regras OBRIGATÓRIAS:
         )
       ),
 
-      // Try again
       React.createElement('button', {
         style:{ ...S.sectionBtn, marginTop:8, marginBottom:20, width:"100%", padding:"10px" },
-        
+        onClick: () => { if (fileRef.current) fileRef.current.click(); }
       }, "📸 Outra foto"),
 
-      // Action buttons
       React.createElement('div', { style: S.scanActions },
         React.createElement('button', { style:{ ...S.submitBtn, background:"#1E1E2E", flex:1 }, onClick: saveOnly },
           "Salvar"
@@ -1182,7 +1103,6 @@ Regras OBRIGATÓRIAS:
       )
     ),
 
-    // Edit block modal reuse
     editBlock && React.createElement(BlockEditModal, {
       block: editBlock,
       onChange: setEditBlock,
@@ -1200,30 +1120,21 @@ function parseWorkoutText(raw) {
   const txt = raw.trim().toLowerCase();
   const blocks = [];
 
-  // Helper: parse time expressions like "1:30", "90s", "2min", "45", "2m30s"
   function parseTime(str) {
     str = str.trim();
-    // mm:ss
     let m = str.match(/^(\d+):(\d{2})$/);
     if (m) return parseInt(m[1])*60 + parseInt(m[2]);
-    // Xm Y s  e.g. "2m30s"
     m = str.match(/^(\d+)m(\d+)s?$/);
     if (m) return parseInt(m[1])*60 + parseInt(m[2]);
-    // Xmin / Xm
     m = str.match(/^(\d+)\s*(min|m)$/);
     if (m) return parseInt(m[1])*60;
-    // Xs
     m = str.match(/^(\d+)\s*s(ec)?$/);
     if (m) return parseInt(m[1]);
-    // plain number → seconds if ≤120, else minutes
     m = str.match(/^(\d+)$/);
     if (m) { const n=parseInt(m[1]); return n<=120 ? n : n*60; }
     return null;
   }
 
-  // ── EMOM X  (every minute on the minute for X minutes) ──────────────────
-  // "emom 20" → 20x 60s work blocks
-  // "emom 20 30s rest" → 20x (30s work + 30s rest)
   let m = txt.match(/emom\s+(\S+)(?:\s+(\S+)\s*(?:work|on))?(?:\s+(\S+)\s*(?:rest|off))?/);
   if (m) {
     const total   = parseTime(m[1]);
@@ -1240,10 +1151,6 @@ function parseWorkoutText(raw) {
     }
   }
 
-  // ── TABATA ───────────────────────────────────────────────────────────────
-  // "tabata" → 8x (20s work + 10s rest)
-  // "tabata 6" → 6 rounds
-  // "tabata 20s 10s 8" → custom work/rest/rounds
   m = txt.match(/tabata(?:\s+(\S+))?(?:\s+(\S+))?(?:\s+(\d+))?/);
   if (m && txt.includes("tabata")) {
     let workDur = 20, restDur = 10, rounds = 8;
@@ -1258,9 +1165,6 @@ function parseWorkoutText(raw) {
     return { name, blocks };
   }
 
-  // ── AMRAP X ──────────────────────────────────────────────────────────────
-  // "amrap 10" → single 10min work block
-  // "amrap 1:30" → single 90s block
   m = txt.match(/amrap\s+(\S+)(?:\s+x\s*(\d+))?(?:\s+rest\s+(\S+))?/);
   if (m) {
     const dur     = parseTime(m[1]);
@@ -1276,9 +1180,6 @@ function parseWorkoutText(raw) {
     }
   }
 
-  // ── FOR TIME / ROUNDS: "X rounds X:XX work Xs rest" ─────────────────────
-  // "6 rounds 1:30 work 1:30 rest"
-  // "5x 2min 1min rest"
   m = txt.match(/(\d+)\s*(?:rounds?|x|sets?)\s+(\S+)(?:\s+(?:work|on))?\s+(\S+)(?:\s+(?:rest|off))?/);
   if (m) {
     const rounds  = parseInt(m[1]);
@@ -1294,7 +1195,6 @@ function parseWorkoutText(raw) {
     }
   }
 
-  // ── INTERVALS: "Xmin on Xmin off" or "Xs on Xs off X rounds" ────────────
   m = txt.match(/(\S+)\s+(?:on|work)\s+(\S+)\s+(?:off|rest)(?:\s+x?\s*(\d+))?/);
   if (m) {
     const workDur = parseTime(m[1]);
@@ -1310,19 +1210,18 @@ function parseWorkoutText(raw) {
     }
   }
 
-  // ── Simple time: just a duration → single work block ────────────────────
   const simple = parseTime(txt.replace(/[a-z\s]/g,"").trim()) || parseTime(txt.split(" ")[0]);
   if (simple) {
     return { name: "Treino " + raw.trim(), blocks:[{ type:"work", label:"Treino", duration: simple }] };
   }
 
-  return null; // couldn't parse
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  QUICK TEXT SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
-function QuickTextScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
+function QuickTextScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
   const [input, setInput]     = useState("");
   const [result, setResult]   = useState(null);
   const [error, setError]     = useState("");
@@ -1349,11 +1248,11 @@ function QuickTextScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
   const total = result ? result.blocks.reduce((a,b)=>a+b.duration,0) : 0;
 
   const saveAndStart = () => { if (!result) return; saveWorkouts([...workouts, result]); startWorkout(result); };
-  const saveOnly     = () => { if (!result) return; saveWorkouts([...workouts, result]); setScreen("home"); };
+  const saveOnly     = () => { if (!result) return; saveWorkouts([...workouts, result]); goTo("home"); };
 
   return React.createElement('div', { style: S.screen },
     React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => setScreen("home") },
+      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
       React.createElement('div', { style: S.screenHeaderTitle }, "DIGITAR TREINO"),
@@ -1361,8 +1260,6 @@ function QuickTextScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
     ),
 
     React.createElement('div', { style:{ padding:"0 16px 120px" } },
-
-      // Input
       React.createElement('div', { style:{ position:"relative", marginBottom:8 } },
         React.createElement('input', {
           style:{ ...S.input, fontSize:18, fontWeight:600, paddingRight:52, marginBottom:0 },
@@ -1381,7 +1278,6 @@ function QuickTextScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
       ),
       error && React.createElement('div', { style:{ color:"#FF4444", fontSize:12, marginBottom:12 } }, error),
 
-      // Examples
       !result && React.createElement('div', null,
         React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:10 } }, "EXEMPLOS"),
         examples.map((ex, i) =>
@@ -1401,7 +1297,6 @@ function QuickTextScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
         )
       ),
 
-      // Result preview
       result && React.createElement('div', null,
         React.createElement('div', { style:{ background:"#13131A", borderRadius:14, padding:"14px 16px", marginBottom:16 } },
           React.createElement('div', { style:{ color:"#00C9A7", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:4 } }, "DETECTADO"),
@@ -1435,9 +1330,9 @@ function QuickTextScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  CHEATSHEET SCREEN — scan workout photo for quick reference
+//  CHEATSHEET SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
-function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) {
+function CheatsheetScreen({ goTo, cheatsheet, setCheatsheet, prevScreen }) {
   const [phase, setPhase]     = useState(cheatsheet ? "done" : "idle");
   const [workout, setWorkout] = useState(cheatsheet || null);
   const [errMsg, setErrMsg]   = useState("");
@@ -1480,18 +1375,17 @@ function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) 
 
   return React.createElement('div', { style: S.screen },
     React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style:{ ...S.backBtn, color:"#888" }, onClick: () => setScreen(prevScreen || "home") },
+      React.createElement('button', { style:{ ...S.backBtn, color:"#888" }, onClick: () => goTo(prevScreen || "home") },
         React.createElement(Icon, { d: icons.back, size:22 })
       ),
       React.createElement('div', { style: S.screenHeaderTitle }, "CONSULTA"),
       prevScreen === "timer" && React.createElement('button', {
         style:{ background:"#00C9A722", border:"1px solid #00C9A744", borderRadius:10,
                 padding:"6px 10px", color:"#00C9A7", fontSize:12, fontWeight:700, cursor:"pointer" },
-        onClick: () => setScreen("timer")
+        onClick: () => goTo("timer")
       }, "Timer")
     ),
 
-    // Always-visible file input at the top
     React.createElement('div', { style:{ padding:"12px 16px 0" } },
       React.createElement('label', { style:{ display:"block" } },
         React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } },
@@ -1518,7 +1412,7 @@ function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) 
     ),
 
     phase === "idle" && React.createElement('div', { style:{ padding:"32px 16px", textAlign:"center" } },
-      React.createElement('div', { style:{ fontSize:56, marginBottom:12 } }, "[]"),
+      React.createElement('div', { style:{ fontSize:56, marginBottom:12 } }, "📋"),
       React.createElement('div', { style:{ color:"#555", fontSize:14, lineHeight:1.7 } },
         "Escolha uma foto do seu treino acima."
       )
@@ -1544,7 +1438,6 @@ function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) 
     )
   );
 }
-
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1628,7 +1521,6 @@ const S = {
   typeBtn:            { flex:1, border:"none", borderRadius:8, padding:"8px 4px", cursor:"pointer", fontWeight:700 },
   durationBtn:        { background:"#1E1E2E", border:"none", borderRadius:8, padding:"8px 10px", color:"#FF6B35", fontSize:12, fontWeight:700, cursor:"pointer" },
   durationDisplay:    { flex:1, textAlign:"center", color:"#fff", fontSize:28, fontWeight:800 },
-  // Scan styles
   scanCta:            { display:"flex", alignItems:"center", gap:12, margin:"0 16px 20px", background:"linear-gradient(135deg,#1A1A2E 0%,#16213E 100%)", border:"1px solid #A29BFE44", borderRadius:18, padding:"16px 18px", cursor:"pointer", color:"#888", width:"calc(100% - 32px)", textAlign:"left" },
   scanIdle:           { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"70vh", padding:"0 32px", textAlign:"center" },
   scanIllustration:   { fontSize:72, marginBottom:20 },
