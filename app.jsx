@@ -43,7 +43,6 @@ const { useState, useEffect, useRef, useCallback } = React;
 function App() {
   const [screen, setScreen]         = useState("home");
   const [prevScreen, setPrevScreen]   = useState("home");
-  const goTo = (s) => { setPrevScreen(screen); setScreen(s); };
   const [prs, setPrs]               = useState(() => load(STORAGE_KEYS.prs));
   const [workouts, setWorkouts]     = useState(() => load(STORAGE_KEYS.workouts));
   const [activeWorkout, setActiveWorkout] = useState(null);
@@ -111,7 +110,7 @@ function HomeScreen({ setScreen, workouts, prs, startWorkout, saveWorkouts, chea
           style:{ flex:1, background:"linear-gradient(135deg,#0A1A10,#0D1F15)", border:"1px solid #00C9A744",
                   borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column",
                   alignItems:"flex-start", gap:6, cursor:"pointer", color:"#fff" },
-          onClick: () => goTo("cheat")
+          onClick: () => setScreen("cheat")
         },
           React.createElement('span', { style:{ fontSize:20 } }, "\u{1F4CB}"),
           React.createElement('span', { style:{ fontSize:13, fontWeight:700 } }, "Consultar"),
@@ -145,7 +144,7 @@ function HomeScreen({ setScreen, workouts, prs, startWorkout, saveWorkouts, chea
         style:{ margin:"0 16px 16px", background:"linear-gradient(135deg,#0A1A10,#0D1F15)",
                 border:"1px solid #00C9A766", borderRadius:16, padding:"12px 16px",
                 display:"flex", gap:12, alignItems:"center", cursor:"pointer" },
-        onClick: () => goTo("cheat")
+        onClick: () => setScreen("cheat")
       },
         cheatsheet.preview && React.createElement('img', {
           src: cheatsheet.preview,
@@ -464,7 +463,7 @@ function TimerScreen({ workout, setScreen, savePr, cheatsheet }) {
       ),
       React.createElement('div', { style: S.timerTitle }, workout ? workout.name.toUpperCase() : "LIVRE"),
       React.createElement('div', { style:{ display:"flex", gap:4 } },
-        React.createElement('button', { style: { ...S.backBtn, color: cheatsheet ? "#00C9A7" : "#555" }, onClick: () => goTo("cheat") },
+        React.createElement('button', { style: { ...S.backBtn, color: cheatsheet ? "#00C9A7" : "#555" }, onClick: () => setScreen("cheat") },
           React.createElement('span', { style:{ fontSize:18, position:"relative" } },
             "\u{1F4CB}",
             cheatsheet && React.createElement('span', {
