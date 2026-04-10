@@ -1,13 +1,18 @@
 // ─── Storage Helpers ────────────────────────────────────────────────────────
-const STORAGE_KEYS = { prs: "workout_prs", workouts: "workout_templates" };
-
+const STORAGE_KEYS = { prs: "workout_prs", workouts: "workout_templates", history: "workout_history" };
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
 }
-
 function save(key, data) {
   try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
 }
+
+// ─── Inject keyframes (#15 fix) ─────────────────────────────────────────────
+(function(){
+  const s = document.createElement("style");
+  s.textContent = "@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}} *{-webkit-tap-highlight-color:transparent} input,button,select{font-family:inherit} body{margin:0;padding:0;background:#0A0A0F}";
+  document.head.appendChild(s);
+})();
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 20, stroke = 2, fill = "none" }) =>
@@ -30,6 +35,9 @@ const icons = {
   back:     "M19 12H5M12 5l-7 7 7 7",
   close:    "M18 6L6 18M6 6l12 12",
   dumbbell: "M6.5 6.5h11M6.5 17.5h11M3 9.5h3m12 0h3M3 14.5h3m12 0h3M6 6.5v11M18 6.5v11",
+  edit:     "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
+  copy:     "M20 9h-9a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-9a2 2 0 00-2-2zM5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1",
+  history:  "M12 8v4l3 3M3 12a9 9 0 1018 0 9 9 0 00-18 0z",
 };
 
 const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
@@ -47,31 +55,60 @@ function App() {
   const [prevScreen, setPrevScreen]   = useState("home");
   const [prs, setPrs]                 = useState(() => load(STORAGE_KEYS.prs));
   const [workouts, setWorkouts]       = useState(() => load(STORAGE_KEYS.workouts));
+  const [hist, setHist]               = useState(() => load(STORAGE_KEYS.history)); // v4
   const [activeWorkout, setActiveWorkout] = useState(null);
   const [cheatsheet, setCheatsheet]   = useState(null);
+  const [editIdx, setEditIdx]         = useState(null); // v1: index of workout being edited
 
   const savePrs = (d) => { setPrs(d); save(STORAGE_KEYS.prs, d); };
   const saveWorkouts = (d) => { setWorkouts(d); save(STORAGE_KEYS.workouts, d); };
+  const saveHist = (d) => { setHist(d); save(STORAGE_KEYS.history, d); }; // v4
   const startWorkout = (w) => { setActiveWorkout(w); goTo("timer"); };
+
+  // v4: log completed session
+  const logSession = (workout, elapsed) => {
+    const entry = {
+      name: workout ? workout.name : "Livre",
+      date: new Date().toISOString(),
+      duration: elapsed,
+      blocks: workout ? workout.blocks.length : 0,
+    };
+    const updated = [entry, ...hist];
+    saveHist(updated);
+  };
 
   const goTo = (s) => {
     setPrevScreen(screen);
     setScreen(s);
   };
 
-  if (screen === "home")    return React.createElement(HomeScreen,    { goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet });
-  if (screen === "timer")   return React.createElement(TimerScreen,   { workout: activeWorkout, goTo, savePr: (pr) => savePrs([pr, ...prs]), cheatsheet });
+  // v1: open builder in edit mode
+  const editWorkout = (idx) => {
+    setEditIdx(idx);
+    goTo("builder");
+  };
+
+  // v2: duplicate a workout
+  const duplicateWorkout = (idx) => {
+    const w = workouts[idx];
+    const copy = { ...w, name: w.name + " (cópia)", blocks: w.blocks.map(b => ({ ...b })) };
+    saveWorkouts([...workouts, copy]);
+  };
+
+  if (screen === "home")    return React.createElement(HomeScreen,    { goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet, editWorkout, duplicateWorkout, hist });
+  if (screen === "timer")   return React.createElement(TimerScreen,   { workout: activeWorkout, goTo, savePr: (pr) => savePrs([pr, ...prs]), cheatsheet, logSession });
   if (screen === "cheat")   return React.createElement(CheatsheetScreen, { goTo, cheatsheet, setCheatsheet, prevScreen });
   if (screen === "pr")      return React.createElement(PRScreen,      { prs, savePrs, goTo });
-  if (screen === "builder") return React.createElement(BuilderScreen, { workouts, saveWorkouts, goTo });
+  if (screen === "builder") return React.createElement(BuilderScreen, { workouts, saveWorkouts, goTo, editIdx, setEditIdx });
   if (screen === "scan")    return React.createElement(ScanScreen,    { goTo, saveWorkouts, workouts, startWorkout });
   if (screen === "quick")   return React.createElement(QuickTextScreen, { goTo, saveWorkouts, workouts, startWorkout });
+  if (screen === "history") return React.createElement(HistoryScreen, { goTo, hist, saveHist }); // v4
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  HOME
 // ═══════════════════════════════════════════════════════════════════════════
-function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet }) {
+function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatsheet, setCheatsheet, editWorkout, duplicateWorkout, hist }) {
   const latestPr = prs[0];
   return (
     React.createElement('div', { style: S.screen },
@@ -80,9 +117,15 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
           React.createElement('div', { style: S.greeting }, "Bom treino 💪"),
           React.createElement('div', { style: S.homeTitle }, "WORKOUT\nHUB")
         ),
-        React.createElement('div', { style: S.prBadge, onClick: () => goTo("pr") },
-          React.createElement(Icon, { d: icons.trophy, size: 22, stroke: 1.5 }),
-          React.createElement('span', { style: S.prCount }, prs.length)
+        React.createElement('div', { style: { display:"flex", gap:8 } },
+          React.createElement('div', { style: S.prBadge, onClick: () => goTo("history") },
+            React.createElement(Icon, { d: icons.history, size: 20, stroke: 1.5 }),
+            React.createElement('span', { style: { color:"#fff", fontSize:12, fontWeight:700 } }, hist.length)
+          ),
+          React.createElement('div', { style: S.prBadge, onClick: () => goTo("pr") },
+            React.createElement(Icon, { d: icons.trophy, size: 22, stroke: 1.5 }),
+            React.createElement('span', { style: S.prCount }, prs.length)
+          )
         )
       ),
       React.createElement('div', { style: S.quickActions },
@@ -99,10 +142,10 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
         style: S.scanCta,
         onClick: () => goTo("scan")
       },
-        React.createElement('span', { style:{ fontSize:22 } }, "\u{1F4F8}"),
+        React.createElement('span', { style:{ fontSize:22 } }, "📸"),
         React.createElement('div', { style:{ flex:1 } },
           React.createElement('div', { style:{ color:"#fff", fontSize:14, fontWeight:700 } }, "Escanear Treino"),
-          React.createElement('div', { style:{ color:"#A29BFE", fontSize:12, marginTop:2 } }, "Foto \u2192 blocos autom\u00e1ticos com IA")
+          React.createElement('div', { style:{ color:"#A29BFE", fontSize:12, marginTop:2 } }, "Foto → blocos automáticos com IA")
         ),
         React.createElement(Icon, { d: icons.next, size: 18, stroke: 2 })
       ),
@@ -113,7 +156,7 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
                   alignItems:"flex-start", gap:6, cursor:"pointer", color:"#fff" },
           onClick: () => goTo("cheat")
         },
-          React.createElement('span', { style:{ fontSize:20 } }, "\u{1F4CB}"),
+          React.createElement('span', { style:{ fontSize:20 } }, "📋"),
           React.createElement('span', { style:{ fontSize:13, fontWeight:700 } }, "Consultar"),
           React.createElement('span', { style:{ fontSize:11, color:"#00C9A7" } }, cheatsheet ? "✓ Carregado" : "Foto → texto")
         ),
@@ -123,7 +166,7 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
                   alignItems:"flex-start", gap:6, cursor:"pointer", color:"#fff" },
           onClick: () => goTo("quick")
         },
-          React.createElement('span', { style:{ fontSize:20 } }, "\u2328\uFE0F"),
+          React.createElement('span', { style:{ fontSize:20 } }, "⌨️"),
           React.createElement('span', { style:{ fontSize:13, fontWeight:700 } }, "Digitar"),
           React.createElement('span', { style:{ fontSize:11, color:"#00C9A7" } }, "emom, tabata...")
         )
@@ -171,7 +214,9 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
               React.createElement(WorkoutCard, {
                 key: i, workout: w,
                 onStart: () => startWorkout(w),
-                onDelete: () => saveWorkouts(workouts.filter((_,j) => j !== i))
+                onDelete: () => saveWorkouts(workouts.filter((_,j) => j !== i)),
+                onEdit: () => editWorkout(i),
+                onDuplicate: () => duplicateWorkout(i),
               })
             )
       )
@@ -179,7 +224,7 @@ function HomeScreen({ goTo, workouts, prs, startWorkout, saveWorkouts, cheatshee
   );
 }
 
-function WorkoutCard({ workout, onStart, onDelete }) {
+function WorkoutCard({ workout, onStart, onDelete, onEdit, onDuplicate }) {
   const totalTime = workout.blocks.reduce((a,b) => a + b.duration, 0);
   return React.createElement('div', { style: S.workoutCard },
     React.createElement('div', { style: S.workoutCardInfo },
@@ -192,6 +237,12 @@ function WorkoutCard({ workout, onStart, onDelete }) {
       )
     ),
     React.createElement('div', { style: { display:"flex", gap:8, alignItems:"center" } },
+      React.createElement('button', { style: S.editBtn, onClick: onEdit },
+        React.createElement(Icon, { d: icons.edit, size: 14 })
+      ),
+      React.createElement('button', { style: S.editBtn, onClick: onDuplicate },
+        React.createElement(Icon, { d: icons.copy, size: 14 })
+      ),
       React.createElement('button', { style: S.deleteBtn, onClick: onDelete }, React.createElement(Icon, { d: icons.trash, size: 16 })),
       React.createElement('button', { style: S.startBtn, onClick: onStart },   React.createElement(Icon, { d: icons.play, size: 18, fill:"white" }))
     )
@@ -267,12 +318,14 @@ function speak(text) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  TIMER
 // ═══════════════════════════════════════════════════════════════════════════
-function TimerScreen({ workout, goTo, savePr, cheatsheet }) {
+function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
   const LEAD_IN = 10;
 
   const [blocks, setBlocks]   = useState(() => workout ? [...workout.blocks] : [{ type:"work", duration:60, label:"Treino Livre" }]);
   const [freeMode]            = useState(!workout);
   const [showPr, setShowPr]   = useState(false);
+  const [editFreeIdx, setEditFreeIdx]   = useState(null);   // v3: edit block in free mode
+  const [editFreeBlock, setEditFreeBlock] = useState(null); // v3
 
   const blockIdxRef  = useRef(0);
   const timeLeftRef  = useRef(null);
@@ -322,8 +375,9 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet }) {
       setDone(true);
       setRunning(false);
       clearInterval(intervalRef.current);
+      logSession(workout, elapsedRef.current); // v4: log to history
     }
-  }, []);
+  }, [workout]);
 
   const tickRef = useRef(null);
   tickRef.current = () => {
@@ -397,6 +451,20 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet }) {
     setBlocks(b => [...b, { type, duration: dur, label: BLOCK_LABELS[type] }]);
   };
 
+  // v3: remove block in free mode
+  const removeBlockFree = (i) => {
+    if (blocks.length <= 1) return;
+    setBlocks(b => b.filter((_, j) => j !== i));
+    if (blockIdxRef.current >= i && blockIdxRef.current > 0) setBlockIdx(blockIdxRef.current - 1);
+  };
+
+  // v3: open edit modal for free mode block
+  const openEditFree = (i) => { setEditFreeIdx(i); setEditFreeBlock({ ...blocks[i] }); };
+  const saveEditFree = () => {
+    setBlocks(b => b.map((bl, i) => i === editFreeIdx ? editFreeBlock : bl));
+    setEditFreeIdx(null); setEditFreeBlock(null);
+  };
+
   const R = 100, C = 2 * Math.PI * R;
 
   const leadProgress   = leadIn > 0 ? 1 - (leadIn / LEAD_IN) : 0;
@@ -420,13 +488,7 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet }) {
       React.createElement('div', { style: S.timerTitle }, workout ? workout.name.toUpperCase() : "LIVRE"),
       React.createElement('div', { style:{ display:"flex", gap:4 } },
         React.createElement('button', { style: { ...S.backBtn, color: cheatsheet ? "#00C9A7" : "#555" }, onClick: () => goTo("cheat") },
-          React.createElement('span', { style:{ fontSize:18, position:"relative" } },
-            "\u{1F4CB}",
-            cheatsheet && React.createElement('span', {
-              style:{ position:"absolute", top:-2, right:-2, width:7, height:7,
-                      background:"#00C9A7", borderRadius:"50%", display:"block" }
-            })
-          )
+          React.createElement('span', { style:{ fontSize:18 } }, "📋")
         ),
         React.createElement('button', { style: { ...S.backBtn, color:"#F7B731" }, onClick: () => setShowPr(true) },
           React.createElement(Icon, { d: icons.trophy, size: 20 })
@@ -542,7 +604,33 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet }) {
         )
       )
     ),
-    showPr && React.createElement(PRModal, { onClose: () => setShowPr(false), savePr: (pr) => { savePr(pr); setShowPr(false); } })
+    // v3: free mode block list with edit + delete
+    freeMode && blocks.length > 0 && React.createElement('div', { style: { ...S.blockList, maxHeight: 300 } },
+      blocks.map((b, i) =>
+        React.createElement('div', { key: i, style: { ...S.blockListItem, borderLeftColor: BLOCK_COLOR_MAP[b.type] } },
+          React.createElement('div', {
+            style: { display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer" },
+            onClick: () => openEditFree(i)
+          },
+            React.createElement('span', { style:{ color: BLOCK_COLOR_MAP[b.type], fontSize:11, fontWeight:700 } }, BLOCK_LABELS[b.type]),
+            React.createElement('span', { style:{ color:"#ccc", fontSize:13 } }, b.label),
+            React.createElement('span', { style:{ color:"#666", fontSize:12, marginLeft:"auto" } }, fmt(b.duration))
+          ),
+          blocks.length > 1 && React.createElement('button', {
+            style: S.deleteBtn,
+            onClick: () => removeBlockFree(i)
+          }, React.createElement(Icon, { d: icons.trash, size: 14 }))
+        )
+      )
+    ),
+    showPr && React.createElement(PRModal, { onClose: () => setShowPr(false), savePr: (pr) => { savePr(pr); setShowPr(false); } }),
+    // v3: block edit modal for free mode
+    editFreeBlock && React.createElement(BlockEditModal, {
+      block: editFreeBlock,
+      onChange: setEditFreeBlock,
+      onConfirm: saveEditFree,
+      onClose: () => setEditFreeIdx(null),
+    })
   );
 }
 
@@ -612,9 +700,6 @@ function PRScreen({ prs, savePrs, goTo }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  PR MODAL
-// ═══════════════════════════════════════════════════════════════════════════
 function PRModal({ onClose, savePr }) {
   const [exercise, setExercise] = useState("");
   const [value, setValue]       = useState("");
@@ -665,9 +750,6 @@ function PRModal({ onClose, savePr }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  BLOCK EDIT MODAL
-// ═══════════════════════════════════════════════════════════════════════════
 function BlockEditModal({ block, onChange, onConfirm, onClose }) {
   const toStr = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
   const [inputVal, setInputVal] = useState(() => toStr(block.duration));
@@ -777,17 +859,22 @@ function BlockEditModal({ block, onChange, onConfirm, onClose }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  BUILDER
+//  BUILDER (v1: supports edit mode)
 // ═══════════════════════════════════════════════════════════════════════════
-function BuilderScreen({ workouts, saveWorkouts, goTo }) {
-  const [name, setName]       = useState("");
-  const [blocks, setBlocks]   = useState([
-    { type:"warmup",  duration:300, label:"Aquecimento" },
-    { type:"work",    duration:60,  label:"Exercício"   },
-    { type:"rest",    duration:30,  label:"Descanso"    },
-  ]);
-  const [editIdx, setEditIdx]     = useState(null);
-  const [editBlock, setEditBlock] = useState(null);
+function BuilderScreen({ workouts, saveWorkouts, goTo, editIdx, setEditIdx }) {
+  const editing = editIdx !== null && workouts[editIdx];
+
+  const [name, setName]       = useState(editing ? editing.name : "");
+  const [blocks, setBlocks]   = useState(editing
+    ? editing.blocks.map(b => ({ ...b }))
+    : [
+        { type:"warmup",  duration:300, label:"Aquecimento" },
+        { type:"work",    duration:60,  label:"Exercício"   },
+        { type:"rest",    duration:30,  label:"Descanso"    },
+      ]
+  );
+  const [editBlkIdx, setEditBlkIdx]   = useState(null);
+  const [editBlock, setEditBlock]     = useState(null);
 
   const totalTime = blocks.reduce((a,b) => a + b.duration, 0);
 
@@ -796,26 +883,35 @@ function BuilderScreen({ workouts, saveWorkouts, goTo }) {
     setBlocks(b => [...b, { type, duration:dur, label: BLOCK_LABELS[type] }]);
   };
   const removeBlock = (i) => setBlocks(b => b.filter((_,j) => j !== i));
-  const openEdit    = (i) => { setEditIdx(i); setEditBlock({ ...blocks[i] }); };
+  const openEdit    = (i) => { setEditBlkIdx(i); setEditBlock({ ...blocks[i] }); };
   const saveEdit    = () => {
-    setBlocks(b => b.map((bl,i) => i === editIdx ? editBlock : bl));
-    setEditIdx(null); setEditBlock(null);
+    setBlocks(b => b.map((bl,i) => i === editBlkIdx ? editBlock : bl));
+    setEditBlkIdx(null); setEditBlock(null);
   };
   const moveUp   = (i) => { if (i===0) return; const b=[...blocks]; [b[i-1],b[i]]=[b[i],b[i-1]]; setBlocks(b); };
   const moveDown = (i) => { if (i===blocks.length-1) return; const b=[...blocks]; [b[i],b[i+1]]=[b[i+1],b[i]]; setBlocks(b); };
 
   const handleSave = () => {
     if (!name || blocks.length === 0) return;
-    saveWorkouts([...workouts, { name, blocks }]);
+    const w = { name, blocks };
+    if (editing) {
+      // v1: update existing workout
+      const arr = [...workouts];
+      arr[editIdx] = w;
+      saveWorkouts(arr);
+    } else {
+      saveWorkouts([...workouts, w]);
+    }
+    setEditIdx(null);
     goTo("home");
   };
 
   return React.createElement('div', { style: S.screen },
     React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
+      React.createElement('button', { style: S.backBtn, onClick: () => { setEditIdx(null); goTo("home"); } },
         React.createElement(Icon, { d: icons.back, size: 22 })
       ),
-      React.createElement('div', { style: S.screenHeaderTitle }, "CRIAR TREINO"),
+      React.createElement('div', { style: S.screenHeaderTitle }, editing ? "EDITAR TREINO" : "CRIAR TREINO"),
       React.createElement('button', {
         style:{ ...S.backBtn, color:"#00C9A7", fontSize:14, fontWeight:700 },
         onClick: handleSave
@@ -864,18 +960,19 @@ function BuilderScreen({ workouts, saveWorkouts, goTo }) {
         )
       )
     ),
+
     editBlock && React.createElement(BlockEditModal, {
       block: editBlock,
       onChange: setEditBlock,
       onConfirm: saveEdit,
-      onClose: () => setEditIdx(null),
+      onClose: () => setEditBlkIdx(null),
     })
   );
 }
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  SCAN SCREEN
+//  SCAN SCREEN (fixed: no duplicate button, fileRef for "Escolher Foto")
 // ═══════════════════════════════════════════════════════════════════════════
 function ScanScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
   const [phase, setPhase]       = useState("idle");
@@ -920,11 +1017,10 @@ Retorne APENAS um JSON válido (sem markdown, sem texto extra) com este formato 
 Regras OBRIGATÓRIAS:
 - Foque SOMENTE em tempos explícitos: "1:30", "90s", "2 min", "Rest 1:30", etc.
 - Se houver N rounds/sets repetindo o mesmo padrão tempo-trabalho + tempo-descanso, crie N pares de blocos (work + rest).
-- NÃO adicione aquecimento automático. Só inclua warmup se estiver explicitamente na imagem com tempo definido.
+- NÃO adicione aquecimento automático.
 - NÃO invente tempos baseados em repetições ou séries sem tempo.
-- NÃO inclua observações, pesos, notas ou instruções — só o que for tempo.
-- "type": use "work" para blocos de esforço, "rest" para descanso, "cooldown" para volta à calma.
-- "duration" em segundos (número inteiro). Ex: 1:30 = 90, 2:00 = 120.
+- "type": use "work" para esforço, "rest" para descanso, "cooldown" para volta à calma.
+- "duration" em segundos (número inteiro).
 - label em português, curto (máx 30 caracteres).
 - Mínimo 1 bloco, máximo 50.`;
 
@@ -956,7 +1052,7 @@ Regras OBRIGATÓRIAS:
       try { data = JSON.parse(rawText); } catch { throw new Error("Resposta inválida do servidor."); }
 
       const raw  = (data.content || []).map(c => c.text || "").join("").trim();
-      if (!raw) throw new Error("Servidor não retornou conteúdo. Verifique a API key no Netlify.");
+      if (!raw) throw new Error("Servidor não retornou conteúdo.");
       const clean = raw.replace(/^```[\w]*\n?/,"").replace(/\n?```$/,"").trim();
       let parsed;
       try { parsed = JSON.parse(clean); } catch { throw new Error("IA não retornou JSON válido: " + raw.slice(0,120)); }
@@ -1022,28 +1118,16 @@ Regras OBRIGATÓRIAS:
       })
     ),
 
-    phase === "idle" && React.createElement('div', { style: S.scanIdle },
+    phase === "idle" && React.createElement('div', { style: { ...S.scanIdle, minHeight:"50vh" } },
       React.createElement('div', { style: S.scanIllustration }, "📋"),
       React.createElement('div', { style:{ color:"#fff", fontSize:20, fontWeight:800, marginBottom:8 } }, "Foto do seu treino"),
-      React.createElement('div', { style:{ color:"#666", fontSize:14, lineHeight:1.7, textAlign:"center", maxWidth:260, marginBottom:32 } },
+      React.createElement('div', { style:{ color:"#666", fontSize:14, lineHeight:1.7, textAlign:"center", maxWidth:260 } },
         "Tire uma foto de qualquer treino: papel, lousa, print de app, planilha... A IA vai ler e montar os blocos automaticamente."
-      ),
-      React.createElement('button', {
-        style: S.scanPickBtn,
-        onClick: () => { if (fileRef.current) fileRef.current.click(); }
-      },
-        React.createElement('span', { style:{ fontSize:22 } }, "\u{1F4F7}"),
-        React.createElement('span', null, "Escolher Foto")
-      ),
-      React.createElement('div', { style:{ color:"#444", fontSize:12, marginTop:16 } }, "Câmera ou galeria")
+      )
     ),
 
     phase === "loading" && React.createElement('div', { style: S.scanLoading },
-      preview && React.createElement('img', {
-        src: preview,
-        style: S.scanPreviewImg,
-        alt: "treino"
-      }),
+      preview && React.createElement('img', { src: preview, style: S.scanPreviewImg, alt: "treino" }),
       React.createElement('div', { style: S.scanSpinnerWrap },
         React.createElement('div', { style: S.scanSpinner }),
         React.createElement('div', { style:{ color:"#A29BFE", fontSize:14, fontWeight:700, marginTop:12 } }, "Analisando treino..."),
@@ -1051,8 +1135,8 @@ Regras OBRIGATÓRIAS:
       )
     ),
 
-    phase === "error" && React.createElement('div', { style: S.scanIdle },
-      React.createElement('div', { style:{ fontSize:48, marginBottom:12 } }, "\u26A0\uFE0F"),
+    phase === "error" && React.createElement('div', { style: { ...S.scanIdle, minHeight:"40vh" } },
+      React.createElement('div', { style:{ fontSize:48, marginBottom:12 } }, "⚠️"),
       React.createElement('div', { style:{ color:"#FF4444", fontSize:16, fontWeight:700, marginBottom:8 } }, "Não foi possível analisar"),
       React.createElement('div', { style:{ color:"#666", fontSize:13, textAlign:"center", maxWidth:280, marginBottom:24, lineHeight:1.6 } }, errMsg),
       React.createElement('div', { style:{ color:"#555", fontSize:13 } }, "Toque no campo acima para tentar novamente"),
@@ -1072,7 +1156,6 @@ Regras OBRIGATÓRIAS:
           )
         )
       ),
-
       React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:10 } }, "BLOCOS DETECTADOS"),
       result.blocks.map((b, i) =>
         React.createElement('div', { key:i, style: S.scanBlock },
@@ -1087,27 +1170,17 @@ Regras OBRIGATÓRIAS:
           )
         )
       ),
-
       React.createElement('button', {
         style:{ ...S.sectionBtn, marginTop:8, marginBottom:20, width:"100%", padding:"10px" },
         onClick: () => { if (fileRef.current) fileRef.current.click(); }
       }, "📸 Outra foto"),
-
       React.createElement('div', { style: S.scanActions },
-        React.createElement('button', { style:{ ...S.submitBtn, background:"#1E1E2E", flex:1 }, onClick: saveOnly },
-          "Salvar"
-        ),
-        React.createElement('button', { style:{ ...S.submitBtn, flex:2 }, onClick: saveAndStart },
-          "▶  Iniciar Agora"
-        )
+        React.createElement('button', { style:{ ...S.submitBtn, background:"#1E1E2E", flex:1 }, onClick: saveOnly }, "Salvar"),
+        React.createElement('button', { style:{ ...S.submitBtn, flex:2 }, onClick: saveAndStart }, "▶  Iniciar Agora")
       )
     ),
-
     editBlock && React.createElement(BlockEditModal, {
-      block: editBlock,
-      onChange: setEditBlock,
-      onConfirm: saveEdit,
-      onClose: () => setEditIdx(null),
+      block: editBlock, onChange: setEditBlock, onConfirm: saveEdit, onClose: () => setEditIdx(null),
     })
   );
 }
@@ -1118,103 +1191,33 @@ Regras OBRIGATÓRIAS:
 // ═══════════════════════════════════════════════════════════════════════════
 function parseWorkoutText(raw) {
   const txt = raw.trim().toLowerCase();
-  const blocks = [];
-
   function parseTime(str) {
     str = str.trim();
-    let m = str.match(/^(\d+):(\d{2})$/);
-    if (m) return parseInt(m[1])*60 + parseInt(m[2]);
-    m = str.match(/^(\d+)m(\d+)s?$/);
-    if (m) return parseInt(m[1])*60 + parseInt(m[2]);
-    m = str.match(/^(\d+)\s*(min|m)$/);
-    if (m) return parseInt(m[1])*60;
-    m = str.match(/^(\d+)\s*s(ec)?$/);
-    if (m) return parseInt(m[1]);
-    m = str.match(/^(\d+)$/);
-    if (m) { const n=parseInt(m[1]); return n<=120 ? n : n*60; }
+    let m = str.match(/^(\d+):(\d{2})$/); if (m) return parseInt(m[1])*60 + parseInt(m[2]);
+    m = str.match(/^(\d+)m(\d+)s?$/); if (m) return parseInt(m[1])*60 + parseInt(m[2]);
+    m = str.match(/^(\d+)\s*(min|m)$/); if (m) return parseInt(m[1])*60;
+    m = str.match(/^(\d+)\s*s(ec)?$/); if (m) return parseInt(m[1]);
+    m = str.match(/^(\d+)$/); if (m) { const n=parseInt(m[1]); return n<=120 ? n : n*60; }
     return null;
   }
 
   let m = txt.match(/emom\s+(\S+)(?:\s+(\S+)\s*(?:work|on))?(?:\s+(\S+)\s*(?:rest|off))?/);
-  if (m) {
-    const total   = parseTime(m[1]);
-    const workDur = m[2] ? parseTime(m[2]) : 60;
-    const restDur = m[3] ? parseTime(m[3]) : null;
-    if (total && workDur) {
-      const rounds = Math.round(total / (restDur ? (workDur + restDur) / 60 : 1));
-      const name = `EMOM ${m[1].toUpperCase()}`;
-      for (let i = 0; i < rounds; i++) {
-        blocks.push({ type:"work", label:`Min ${i+1}`, duration: workDur });
-        if (restDur) blocks.push({ type:"rest", label:"Descanso", duration: restDur });
-      }
-      return { name, blocks };
-    }
-  }
+  if (m) { const total=parseTime(m[1]),wd=m[2]?parseTime(m[2]):60,rd=m[3]?parseTime(m[3]):null; if(total&&wd){const rounds=Math.round(total/(rd?(wd+rd)/60:1));const blocks=[];for(let i=0;i<rounds;i++){blocks.push({type:"work",label:`Min ${i+1}`,duration:wd});if(rd)blocks.push({type:"rest",label:"Descanso",duration:rd});}return{name:`EMOM ${m[1].toUpperCase()}`,blocks};}}
 
   m = txt.match(/tabata(?:\s+(\S+))?(?:\s+(\S+))?(?:\s+(\d+))?/);
-  if (m && txt.includes("tabata")) {
-    let workDur = 20, restDur = 10, rounds = 8;
-    if (m[1]) { const t = parseTime(m[1]); if (t) workDur = t; else if (parseInt(m[1])) rounds = parseInt(m[1]); }
-    if (m[2]) { const t = parseTime(m[2]); if (t) restDur = t; }
-    if (m[3]) rounds = parseInt(m[3]);
-    const name = `TABATA ${rounds}×${workDur}s/${restDur}s`;
-    for (let i = 0; i < rounds; i++) {
-      blocks.push({ type:"work", label:`Round ${i+1}`, duration: workDur });
-      if (i < rounds-1) blocks.push({ type:"rest", label:"Descanso", duration: restDur });
-    }
-    return { name, blocks };
-  }
+  if (m && txt.includes("tabata")) { let wd=20,rd=10,rounds=8;if(m[1]){const t=parseTime(m[1]);if(t)wd=t;else if(parseInt(m[1]))rounds=parseInt(m[1]);}if(m[2]){const t=parseTime(m[2]);if(t)rd=t;}if(m[3])rounds=parseInt(m[3]);const blocks=[];for(let i=0;i<rounds;i++){blocks.push({type:"work",label:`Round ${i+1}`,duration:wd});if(i<rounds-1)blocks.push({type:"rest",label:"Descanso",duration:rd});}return{name:`TABATA ${rounds}×${wd}s/${rd}s`,blocks};}
 
   m = txt.match(/amrap\s+(\S+)(?:\s+x\s*(\d+))?(?:\s+rest\s+(\S+))?/);
-  if (m) {
-    const dur     = parseTime(m[1]);
-    const rounds  = m[2] ? parseInt(m[2]) : 1;
-    const restDur = m[3] ? parseTime(m[3]) : null;
-    if (dur) {
-      const name = `AMRAP ${m[1].toUpperCase()}${rounds>1 ? ` x${rounds}` : ""}`;
-      for (let i = 0; i < rounds; i++) {
-        blocks.push({ type:"work", label:`AMRAP ${i+1}`, duration: dur });
-        if (restDur && i < rounds-1) blocks.push({ type:"rest", label:"Descanso", duration: restDur });
-      }
-      return { name, blocks };
-    }
-  }
+  if (m) { const dur=parseTime(m[1]),rounds=m[2]?parseInt(m[2]):1,rd=m[3]?parseTime(m[3]):null;if(dur){const blocks=[];for(let i=0;i<rounds;i++){blocks.push({type:"work",label:`AMRAP ${i+1}`,duration:dur});if(rd&&i<rounds-1)blocks.push({type:"rest",label:"Descanso",duration:rd});}return{name:`AMRAP ${m[1].toUpperCase()}${rounds>1?` x${rounds}`:""}`,blocks};}}
 
   m = txt.match(/(\d+)\s*(?:rounds?|x|sets?)\s+(\S+)(?:\s+(?:work|on))?\s+(\S+)(?:\s+(?:rest|off))?/);
-  if (m) {
-    const rounds  = parseInt(m[1]);
-    const workDur = parseTime(m[2]);
-    const restDur = parseTime(m[3]);
-    if (rounds && workDur && restDur) {
-      const name = `${rounds}x ${m[2]}/${m[3]}`;
-      for (let i = 0; i < rounds; i++) {
-        blocks.push({ type:"work", label:`Round ${i+1}`, duration: workDur });
-        if (i < rounds-1) blocks.push({ type:"rest", label:"Descanso", duration: restDur });
-      }
-      return { name, blocks };
-    }
-  }
+  if (m) { const rounds=parseInt(m[1]),wd=parseTime(m[2]),rd=parseTime(m[3]);if(rounds&&wd&&rd){const blocks=[];for(let i=0;i<rounds;i++){blocks.push({type:"work",label:`Round ${i+1}`,duration:wd});if(i<rounds-1)blocks.push({type:"rest",label:"Descanso",duration:rd});}return{name:`${rounds}x ${m[2]}/${m[3]}`,blocks};}}
 
   m = txt.match(/(\S+)\s+(?:on|work)\s+(\S+)\s+(?:off|rest)(?:\s+x?\s*(\d+))?/);
-  if (m) {
-    const workDur = parseTime(m[1]);
-    const restDur = parseTime(m[2]);
-    const rounds  = m[3] ? parseInt(m[3]) : 1;
-    if (workDur && restDur) {
-      const name = `Intervalo ${m[1]}/${m[2]}${rounds>1?` x${rounds}`:""}`;
-      for (let i = 0; i < rounds; i++) {
-        blocks.push({ type:"work", label:`Round ${i+1}`, duration: workDur });
-        blocks.push({ type:"rest", label:"Descanso", duration: restDur });
-      }
-      return { name, blocks };
-    }
-  }
+  if (m) { const wd=parseTime(m[1]),rd=parseTime(m[2]),rounds=m[3]?parseInt(m[3]):1;if(wd&&rd){const blocks=[];for(let i=0;i<rounds;i++){blocks.push({type:"work",label:`Round ${i+1}`,duration:wd});blocks.push({type:"rest",label:"Descanso",duration:rd});}return{name:`Intervalo ${m[1]}/${m[2]}${rounds>1?` x${rounds}`:""}`,blocks};}}
 
   const simple = parseTime(txt.replace(/[a-z\s]/g,"").trim()) || parseTime(txt.split(" ")[0]);
-  if (simple) {
-    return { name: "Treino " + raw.trim(), blocks:[{ type:"work", label:"Treino", duration: simple }] };
-  }
-
+  if (simple) return { name: "Treino " + raw.trim(), blocks:[{ type:"work", label:"Treino", duration: simple }] };
   return null;
 }
 
@@ -1222,220 +1225,122 @@ function parseWorkoutText(raw) {
 //  QUICK TEXT SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
 function QuickTextScreen({ goTo, saveWorkouts, workouts, startWorkout }) {
-  const [input, setInput]     = useState("");
-  const [result, setResult]   = useState(null);
-  const [error, setError]     = useState("");
+  const [input, setInput]=useState("");const [result, setResult]=useState(null);const [error, setError]=useState("");
+  const examples=[{label:"EMOM 20",desc:"20 blocos de 1 min"},{label:"tabata",desc:"8× 20s/10s"},{label:"amrap 1:30 x6 rest 1:30",desc:"6 rounds AMRAP"},{label:"6 rounds 1:30 1:30",desc:"6× trabalho + descanso"},{label:"20s on 10s off x8",desc:"intervalos custom"},{label:"emom 30 40s work 20s rest",desc:"EMOM com descanso"}];
+  const parse=(txt)=>{const r=parseWorkoutText(txt||input);if(r&&r.blocks.length>0){setResult(r);setError("");}else{setResult(null);setError("Não entendi. Tente: emom 20, tabata, 6 rounds 1:30 1:30");}};
+  const total=result?result.blocks.reduce((a,b)=>a+b.duration,0):0;
+  const saveAndStart=()=>{if(!result)return;saveWorkouts([...workouts,result]);startWorkout(result);};
+  const saveOnly=()=>{if(!result)return;saveWorkouts([...workouts,result]);goTo("home");};
 
-  const examples = [
-    { label:"EMOM 20",            desc:"20 blocos de 1 min" },
-    { label:"tabata",             desc:"8× 20s/10s" },
-    { label:"amrap 1:30 x6 rest 1:30", desc:"6 rounds AMRAP" },
-    { label:"6 rounds 1:30 1:30", desc:"6× trabalho + descanso" },
-    { label:"20s on 10s off x8",  desc:"intervalos custom" },
-    { label:"emom 30 40s work 20s rest", desc:"EMOM com descanso" },
-  ];
-
-  const parse = (txt) => {
-    const r = parseWorkoutText(txt || input);
-    if (r && r.blocks.length > 0) {
-      setResult(r); setError("");
-    } else {
-      setResult(null);
-      setError("Não entendi o formato. Tente: emom 20, tabata, 6 rounds 1:30 1:30");
-    }
-  };
-
-  const total = result ? result.blocks.reduce((a,b)=>a+b.duration,0) : 0;
-
-  const saveAndStart = () => { if (!result) return; saveWorkouts([...workouts, result]); startWorkout(result); };
-  const saveOnly     = () => { if (!result) return; saveWorkouts([...workouts, result]); goTo("home"); };
-
-  return React.createElement('div', { style: S.screen },
-    React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
-        React.createElement(Icon, { d: icons.back, size: 22 })
-      ),
-      React.createElement('div', { style: S.screenHeaderTitle }, "DIGITAR TREINO"),
-      React.createElement('div', { style:{ width:32 } })
-    ),
-
-    React.createElement('div', { style:{ padding:"0 16px 120px" } },
-      React.createElement('div', { style:{ position:"relative", marginBottom:8 } },
-        React.createElement('input', {
-          style:{ ...S.input, fontSize:18, fontWeight:600, paddingRight:52, marginBottom:0 },
-          placeholder: "emom 20, tabata, amrap 10...",
-          value: input,
-          onChange: e => { setInput(e.target.value); setResult(null); setError(""); },
-          onKeyDown: e => { if (e.key==="Enter") { e.target.blur(); parse(); } },
-          autoCapitalize: "none", autoCorrect: "off", spellCheck: false,
-        }),
-        input.length > 0 && React.createElement('button', {
-          style:{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
-                  background:"#FF6B35", border:"none", borderRadius:10, padding:"6px 12px",
-                  color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" },
-          onClick: () => parse()
-        }, "IR")
-      ),
-      error && React.createElement('div', { style:{ color:"#FF4444", fontSize:12, marginBottom:12 } }, error),
-
-      !result && React.createElement('div', null,
-        React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:10 } }, "EXEMPLOS"),
-        examples.map((ex, i) =>
-          React.createElement('button', {
-            key: i,
-            style:{ width:"100%", background:"#13131A", border:"1px solid #2A2A3A", borderRadius:12,
-                    padding:"12px 14px", marginBottom:8, cursor:"pointer",
-                    display:"flex", justifyContent:"space-between", alignItems:"center" },
-            onClick: () => { setInput(ex.label); parse(ex.label); }
-          },
-            React.createElement('div', null,
-              React.createElement('div', { style:{ color:"#00C9A7", fontSize:14, fontWeight:700, textAlign:"left" } }, ex.label),
-              React.createElement('div', { style:{ color:"#666", fontSize:12, marginTop:2 } }, ex.desc)
-            ),
-            React.createElement(Icon, { d: icons.next, size: 16, stroke: 2 })
-          )
-        )
-      ),
-
-      result && React.createElement('div', null,
-        React.createElement('div', { style:{ background:"#13131A", borderRadius:14, padding:"14px 16px", marginBottom:16 } },
-          React.createElement('div', { style:{ color:"#00C9A7", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:4 } }, "DETECTADO"),
-          React.createElement('div', { style:{ color:"#fff", fontSize:20, fontWeight:800 } }, result.name),
-          React.createElement('div', { style:{ color:"#888", fontSize:13, marginTop:4 } },
-            `${result.blocks.length} blocos · ${fmt(total)}`
-          ),
-          React.createElement('div', { style:{ display:"flex", gap:4, marginTop:10, flexWrap:"wrap" } },
-            result.blocks.map((b,i) =>
-              React.createElement('div', { key:i,
-                style:{ background: BLOCK_COLOR_MAP[b.type]+"33", border:`1px solid ${BLOCK_COLOR_MAP[b.type]}66`,
-                        borderRadius:6, padding:"3px 7px", fontSize:11, color: BLOCK_COLOR_MAP[b.type], fontWeight:700 }
-              }, fmt(b.duration))
-            )
-          )
-        ),
-        React.createElement('button', {
-          style:{ ...S.sectionBtn, width:"100%", padding:"10px", marginBottom:8, textAlign:"center" },
-          onClick: () => { setResult(null); setInput(""); }
-        }, "← Tentar outro"),
-        React.createElement('div', { style:{ display:"flex", gap:10, position:"fixed", bottom:0, left:0, right:0,
-                                              padding:"12px 16px 32px", background:"#0A0A0F",
-                                              borderTop:"1px solid #1E1E2E", maxWidth:430, margin:"0 auto" } },
-          React.createElement('button', { style:{ ...S.submitBtn, background:"#1E1E2E", flex:1 }, onClick: saveOnly }, "Salvar"),
-          React.createElement('button', { style:{ ...S.submitBtn, flex:2 }, onClick: saveAndStart }, "▶  Iniciar Agora")
-        )
+  return React.createElement('div',{style:S.screen},
+    React.createElement('div',{style:S.screenHeader},React.createElement('button',{style:S.backBtn,onClick:()=>goTo("home")},React.createElement(Icon,{d:icons.back,size:22})),React.createElement('div',{style:S.screenHeaderTitle},"DIGITAR TREINO"),React.createElement('div',{style:{width:32}})),
+    React.createElement('div',{style:{padding:"0 16px 120px"}},
+      React.createElement('div',{style:{position:"relative",marginBottom:8}},React.createElement('input',{style:{...S.input,fontSize:18,fontWeight:600,paddingRight:52,marginBottom:0},placeholder:"emom 20, tabata, amrap 10...",value:input,onChange:e=>{setInput(e.target.value);setResult(null);setError("");},onKeyDown:e=>{if(e.key==="Enter"){e.target.blur();parse();}},autoCapitalize:"none",autoCorrect:"off",spellCheck:false}),input.length>0&&React.createElement('button',{style:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#FF6B35",border:"none",borderRadius:10,padding:"6px 12px",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"},onClick:()=>parse()},"IR")),
+      error&&React.createElement('div',{style:{color:"#FF4444",fontSize:12,marginBottom:12}},error),
+      !result&&React.createElement('div',null,React.createElement('div',{style:{color:"#888",fontSize:11,fontWeight:700,letterSpacing:2,marginBottom:10}},"EXEMPLOS"),examples.map((ex,i)=>React.createElement('button',{key:i,style:{width:"100%",background:"#13131A",border:"1px solid #2A2A3A",borderRadius:12,padding:"12px 14px",marginBottom:8,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"},onClick:()=>{setInput(ex.label);parse(ex.label);}},React.createElement('div',null,React.createElement('div',{style:{color:"#00C9A7",fontSize:14,fontWeight:700,textAlign:"left"}},ex.label),React.createElement('div',{style:{color:"#666",fontSize:12,marginTop:2}},ex.desc)),React.createElement(Icon,{d:icons.next,size:16,stroke:2})))),
+      result&&React.createElement('div',null,
+        React.createElement('div',{style:{background:"#13131A",borderRadius:14,padding:"14px 16px",marginBottom:16}},React.createElement('div',{style:{color:"#00C9A7",fontSize:11,fontWeight:700,letterSpacing:2,marginBottom:4}},"DETECTADO"),React.createElement('div',{style:{color:"#fff",fontSize:20,fontWeight:800}},result.name),React.createElement('div',{style:{color:"#888",fontSize:13,marginTop:4}},`${result.blocks.length} blocos · ${fmt(total)}`),React.createElement('div',{style:{display:"flex",gap:4,marginTop:10,flexWrap:"wrap"}},result.blocks.map((b,i)=>React.createElement('div',{key:i,style:{background:BLOCK_COLOR_MAP[b.type]+"33",border:`1px solid ${BLOCK_COLOR_MAP[b.type]}66`,borderRadius:6,padding:"3px 7px",fontSize:11,color:BLOCK_COLOR_MAP[b.type],fontWeight:700}},fmt(b.duration))))),
+        React.createElement('button',{style:{...S.sectionBtn,width:"100%",padding:"10px",marginBottom:8,textAlign:"center"},onClick:()=>{setResult(null);setInput("");}},"← Tentar outro"),
+        React.createElement('div',{style:{display:"flex",gap:10,position:"fixed",bottom:0,left:0,right:0,padding:"12px 16px 32px",background:"#0A0A0F",borderTop:"1px solid #1E1E2E",maxWidth:430,margin:"0 auto"}},React.createElement('button',{style:{...S.submitBtn,background:"#1E1E2E",flex:1},onClick:saveOnly},"Salvar"),React.createElement('button',{style:{...S.submitBtn,flex:2},onClick:saveAndStart},"▶  Iniciar Agora"))
       )
+    )
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CHEATSHEET
+// ═══════════════════════════════════════════════════════════════════════════
+function CheatsheetScreen({ goTo, cheatsheet, setCheatsheet, prevScreen }) {
+  const [phase, setPhase]=useState(cheatsheet?"done":"idle");const [wk,setWk]=useState(cheatsheet||null);const [err,setErr]=useState("");
+  const handleFile=async(e)=>{const file=e.target.files?.[0];if(!file)return;setPhase("loading");setWk(null);setErr("");const reader=new FileReader();reader.onload=async(ev)=>{const dataUrl=ev.target.result,base64=dataUrl.split(",")[1];const st=["image/jpeg","image/png","image/gif","image/webp"].includes(file.type)?file.type:"image/jpeg";const prompt='Analise esta imagem de treino e extraia o conteudo. Retorne APENAS JSON valido sem markdown: {"name":"nome do treino","items":["linha como aparece na imagem"],"notes":"observacoes ou vazio"}. Copie o texto fielmente, max 30 itens, ignore logos.';try{const res=await fetch(window.location.hostname.includes("netlify")?"/.netlify/functions/analyze":"/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:st,data:base64}},{type:"text",text:prompt}]}]})});const rawText=await res.text();if(!res.ok){let j={};try{j=JSON.parse(rawText);}catch{};throw new Error(j?.error?.message||"Erro "+res.status);}const data=JSON.parse(rawText);const raw=(data.content||[]).map(c=>c.text||"").join("").trim();const clean=raw.replace(/^```[\w]*\n?/,"").replace(/\n?```$/,"").trim();const parsed=JSON.parse(clean);if(!parsed.items?.length)throw new Error("Nao foi possivel ler.");const result={...parsed,preview:dataUrl};setWk(result);setCheatsheet(result);setPhase("done");}catch(err){setErr(err.message||"Erro.");setPhase("error");}};reader.readAsDataURL(file);};
+
+  return React.createElement('div',{style:S.screen},
+    React.createElement('div',{style:S.screenHeader},React.createElement('button',{style:{...S.backBtn,color:"#888"},onClick:()=>goTo(prevScreen||"home")},React.createElement(Icon,{d:icons.back,size:22})),React.createElement('div',{style:S.screenHeaderTitle},"CONSULTA"),prevScreen==="timer"&&React.createElement('button',{style:{background:"#00C9A722",border:"1px solid #00C9A744",borderRadius:10,padding:"6px 10px",color:"#00C9A7",fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>goTo("timer")},"Timer")),
+    React.createElement('div',{style:{padding:"12px 16px 0"}},React.createElement('label',{style:{display:"block"}},React.createElement('div',{style:{color:"#888",fontSize:11,fontWeight:700,letterSpacing:2,marginBottom:8}},phase==="done"?"TROCAR FOTO":"CARREGAR FOTO DO TREINO"),React.createElement('input',{type:"file",accept:"image/*",onChange:handleFile,style:{display:"block",width:"100%",padding:"13px 14px",background:"#13131A",border:"1.5px dashed #00C9A7",borderRadius:14,color:"#00C9A7",fontSize:14,fontWeight:600,cursor:"pointer",boxSizing:"border-box"}}))),
+    phase==="loading"&&React.createElement('div',{style:{...S.scanIdle,minHeight:"50vh"}},React.createElement('div',{style:{...S.scanSpinner,borderTopColor:"#00C9A7",marginBottom:16}}),React.createElement('div',{style:{color:"#00C9A7",fontSize:14,fontWeight:700}},"Lendo treino...")),
+    phase==="error"&&React.createElement('div',{style:{padding:"24px 16px",textAlign:"center"}},React.createElement('div',{style:{color:"#FF4444",fontSize:14,fontWeight:700,marginBottom:8}},"Nao foi possivel ler"),React.createElement('div',{style:{color:"#666",fontSize:12,lineHeight:1.6}},err)),
+    phase==="idle"&&React.createElement('div',{style:{padding:"32px 16px",textAlign:"center"}},React.createElement('div',{style:{fontSize:56,marginBottom:12}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14,lineHeight:1.7}},"Escolha uma foto do seu treino acima.")),
+    phase==="done"&&wk&&React.createElement('div',{style:{padding:"12px 16px 60px",overflowY:"auto"}},
+      React.createElement('div',{style:{display:"flex",gap:12,alignItems:"center",marginBottom:16}},wk.preview&&React.createElement('img',{src:wk.preview,style:{width:52,height:52,objectFit:"cover",borderRadius:8,flexShrink:0}}),React.createElement('div',{style:{flex:1}},React.createElement('div',{style:{color:"#fff",fontSize:17,fontWeight:800}},wk.name),React.createElement('div',{style:{color:"#666",fontSize:12,marginTop:3}},(wk.items?.length||0)+" itens"))),
+      (wk.items||[]).map((item,i)=>React.createElement('div',{key:i,style:{background:"#13131A",borderRadius:10,padding:"11px 14px",marginBottom:7,borderLeft:"3px solid #00C9A7"}},React.createElement('div',{style:{color:"#fff",fontSize:14,lineHeight:1.5}},item))),
+      wk.notes?React.createElement('div',{style:{background:"#0E1A10",border:"1px solid #00C9A744",borderRadius:10,padding:"12px 14px",marginTop:4}},React.createElement('div',{style:{color:"#00C9A7",fontSize:11,fontWeight:700,letterSpacing:2,marginBottom:6}},"NOTAS"),React.createElement('div',{style:{color:"#aaa",fontSize:13,lineHeight:1.6}},wk.notes)):null
     )
   );
 }
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  CHEATSHEET SCREEN
+//  HISTORY SCREEN (v4)
 // ═══════════════════════════════════════════════════════════════════════════
-function CheatsheetScreen({ goTo, cheatsheet, setCheatsheet, prevScreen }) {
-  const [phase, setPhase]     = useState(cheatsheet ? "done" : "idle");
-  const [workout, setWorkout] = useState(cheatsheet || null);
-  const [errMsg, setErrMsg]   = useState("");
+function HistoryScreen({ goTo, hist, saveHist }) {
+  // Group by date
+  const grouped = {};
+  hist.forEach(h => {
+    const d = new Date(h.date).toLocaleDateString("pt-BR");
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(h);
+  });
 
-  const handleFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPhase("loading");
-    setWorkout(null);
-    setErrMsg("");
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl  = ev.target.result;
-      const base64   = dataUrl.split(",")[1];
-      const safeType = ["image/jpeg","image/png","image/gif","image/webp"].includes(file.type) ? file.type : "image/jpeg";
-      const prompt   = 'Analise esta imagem de treino e extraia o conteudo. Retorne APENAS JSON valido sem markdown: {"name":"nome do treino","items":["linha como aparece na imagem"],"notes":"observacoes ou vazio"}. Copie o texto fielmente, max 30 itens, ignore logos.';
-      try {
-        const res = await fetch(window.location.hostname.includes("netlify") ? "/.netlify/functions/analyze" : "/api/analyze", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:800,
-            messages:[{ role:"user", content:[
-              { type:"image", source:{ type:"base64", media_type:safeType, data:base64 } },
-              { type:"text", text:prompt }
-            ]}]
-          })
-        });
-        const rawText = await res.text();
-        if (!res.ok) { let j={}; try{j=JSON.parse(rawText);}catch{}; throw new Error(j?.error?.message||"Erro "+res.status); }
-        const data  = JSON.parse(rawText);
-        const raw   = (data.content||[]).map(c=>c.text||"").join("").trim();
-        const clean = raw.replace(/^```[\w]*\n?/,"").replace(/\n?```$/,"").trim();
-        const parsed = JSON.parse(clean);
-        if (!parsed.items?.length) throw new Error("Nao foi possivel ler.");
-        const result = { ...parsed, preview: dataUrl };
-        setWorkout(result); setCheatsheet(result); setPhase("done");
-      } catch(err) { setErrMsg(err.message||"Erro."); setPhase("error"); }
-    };
-    reader.readAsDataURL(file);
-  };
+  // Stats: last 7 days
+  const now = Date.now();
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const weekSessions = hist.filter(h => now - new Date(h.date).getTime() < week);
+  const totalWeek = weekSessions.reduce((a, h) => a + (h.duration || 0), 0);
 
   return React.createElement('div', { style: S.screen },
     React.createElement('div', { style: S.screenHeader },
-      React.createElement('button', { style:{ ...S.backBtn, color:"#888" }, onClick: () => goTo(prevScreen || "home") },
-        React.createElement(Icon, { d: icons.back, size:22 })
+      React.createElement('button', { style: S.backBtn, onClick: () => goTo("home") },
+        React.createElement(Icon, { d: icons.back, size: 22 })
       ),
-      React.createElement('div', { style: S.screenHeaderTitle }, "CONSULTA"),
-      prevScreen === "timer" && React.createElement('button', {
-        style:{ background:"#00C9A722", border:"1px solid #00C9A744", borderRadius:10,
-                padding:"6px 10px", color:"#00C9A7", fontSize:12, fontWeight:700, cursor:"pointer" },
-        onClick: () => goTo("timer")
-      }, "Timer")
+      React.createElement('div', { style: S.screenHeaderTitle }, "HISTÓRICO"),
+      React.createElement('button', {
+        style: { ...S.backBtn, color: "#FF4444", fontSize: 11 },
+        onClick: () => { if (confirm("Limpar todo histórico?")) saveHist([]); }
+      }, "Limpar")
     ),
 
-    React.createElement('div', { style:{ padding:"12px 16px 0" } },
-      React.createElement('label', { style:{ display:"block" } },
-        React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } },
-          phase === "done" ? "TROCAR FOTO" : "CARREGAR FOTO DO TREINO"
-        ),
-        React.createElement('input', {
-          type:"file", accept:"image/*", onChange: handleFile,
-          style:{ display:"block", width:"100%", padding:"13px 14px",
-                  background:"#13131A", border:"1.5px dashed #00C9A7",
-                  borderRadius:14, color:"#00C9A7", fontSize:14,
-                  fontWeight:600, cursor:"pointer", boxSizing:"border-box" }
-        })
-      )
+    // Week summary card
+    React.createElement('div', {
+      style: { margin: "0 16px 20px", background: "linear-gradient(135deg,#1A1A2E,#16213E)", borderRadius: 16, padding: "16px 20px" }
+    },
+      React.createElement('div', { style: { color: "#A29BFE", fontSize: 10, fontWeight: 700, letterSpacing: 2 } }, "ÚLTIMOS 7 DIAS"),
+      React.createElement('div', { style: { color: "#fff", fontSize: 32, fontWeight: 900, marginTop: 4 } }, fmt(totalWeek)),
+      React.createElement('div', { style: { color: "#666", fontSize: 12, marginTop: 2 } }, weekSessions.length + " sessões")
     ),
 
-    phase === "loading" && React.createElement('div', { style:{ ...S.scanIdle, minHeight:"50vh" } },
-      React.createElement('div', { style:{ ...S.scanSpinner, borderTopColor:"#00C9A7", marginBottom:16 } }),
-      React.createElement('div', { style:{ color:"#00C9A7", fontSize:14, fontWeight:700 } }, "Lendo treino...")
-    ),
-
-    phase === "error" && React.createElement('div', { style:{ padding:"24px 16px", textAlign:"center" } },
-      React.createElement('div', { style:{ color:"#FF4444", fontSize:14, fontWeight:700, marginBottom:8 } }, "Nao foi possivel ler"),
-      React.createElement('div', { style:{ color:"#666", fontSize:12, lineHeight:1.6 } }, errMsg)
-    ),
-
-    phase === "idle" && React.createElement('div', { style:{ padding:"32px 16px", textAlign:"center" } },
-      React.createElement('div', { style:{ fontSize:56, marginBottom:12 } }, "📋"),
-      React.createElement('div', { style:{ color:"#555", fontSize:14, lineHeight:1.7 } },
-        "Escolha uma foto do seu treino acima."
-      )
-    ),
-
-    phase === "done" && workout && React.createElement('div', { style:{ padding:"12px 16px 60px", overflowY:"auto" } },
-      React.createElement('div', { style:{ display:"flex", gap:12, alignItems:"center", marginBottom:16 } },
-        workout.preview && React.createElement('img', { src: workout.preview, style:{ width:52, height:52, objectFit:"cover", borderRadius:8, flexShrink:0 } }),
-        React.createElement('div', { style:{ flex:1 } },
-          React.createElement('div', { style:{ color:"#fff", fontSize:17, fontWeight:800 } }, workout.name),
-          React.createElement('div', { style:{ color:"#666", fontSize:12, marginTop:3 } }, (workout.items?.length||0) + " itens")
+    hist.length === 0
+      ? React.createElement('div', { style: S.prEmpty },
+          React.createElement('div', { style: { fontSize: 56, marginBottom: 16 } }, "📊"),
+          React.createElement('div', { style: { color: "#fff", fontSize: 18, fontWeight: 700 } }, "Sem histórico"),
+          React.createElement('div', { style: { color: "#666", fontSize: 14, marginTop: 8 } }, "Complete um treino para registrar.")
         )
-      ),
-      (workout.items||[]).map((item, i) =>
-        React.createElement('div', { key:i, style:{ background:"#13131A", borderRadius:10, padding:"11px 14px", marginBottom:7, borderLeft:"3px solid #00C9A7" } },
-          React.createElement('div', { style:{ color:"#fff", fontSize:14, lineHeight:1.5 } }, item)
+      : React.createElement('div', { style: { padding: "0 16px 60px" } },
+          Object.entries(grouped).map(([date, sessions]) =>
+            React.createElement('div', { key: date, style: { marginBottom: 20 } },
+              React.createElement('div', { style: { color: "#666", fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 } }, date),
+              sessions.map((s, i) =>
+                React.createElement('div', {
+                  key: i,
+                  style: { background: "#13131A", borderRadius: 12, padding: "12px 14px", marginBottom: 6,
+                           display: "flex", justifyContent: "space-between", alignItems: "center" }
+                },
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { color: "#fff", fontSize: 15, fontWeight: 700 } }, s.name),
+                    React.createElement('div', { style: { color: "#666", fontSize: 12, marginTop: 2 } },
+                      (s.blocks || 0) + " blocos"
+                    )
+                  ),
+                  React.createElement('div', { style: { textAlign: "right" } },
+                    React.createElement('div', { style: { color: "#FF6B35", fontSize: 16, fontWeight: 800 } }, fmt(s.duration || 0)),
+                    React.createElement('div', { style: { color: "#555", fontSize: 11 } },
+                      new Date(s.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+                    )
+                  )
+                )
+              )
+            )
+          )
         )
-      ),
-      workout.notes ? React.createElement('div', { style:{ background:"#0E1A10", border:"1px solid #00C9A744", borderRadius:10, padding:"12px 14px", marginTop:4 } },
-        React.createElement('div', { style:{ color:"#00C9A7", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:6 } }, "NOTAS"),
-        React.createElement('div', { style:{ color:"#aaa", fontSize:13, lineHeight:1.6 } }, workout.notes)
-      ) : null
-    )
   );
 }
 
@@ -1444,97 +1349,31 @@ function CheatsheetScreen({ goTo, cheatsheet, setCheatsheet, prevScreen }) {
 //  STYLES
 // ═══════════════════════════════════════════════════════════════════════════
 const S = {
-  screen:             { minHeight:"100vh", background:"#0A0A0F", overflowY:"auto", paddingBottom:40, fontFamily:"'-apple-system', BlinkMacSystemFont, 'SF Pro Display', sans-serif" },
-  homeHeader:         { padding:"env(safe-area-inset-top, 52px) 20px 20px", paddingTop:"max(52px, env(safe-area-inset-top, 52px))", display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
-  greeting:           { color:"#888", fontSize:14, marginBottom:4, letterSpacing:1 },
-  homeTitle:          { color:"#fff", fontSize:42, fontWeight:900, lineHeight:1.05, letterSpacing:-1, whiteSpace:"pre-line" },
-  prBadge:            { background:"#1E1E2E", borderRadius:14, padding:"12px 14px", display:"flex", flexDirection:"column", alignItems:"center", gap:4, cursor:"pointer", color:"#F7B731" },
-  prCount:            { color:"#fff", fontSize:18, fontWeight:700 },
-  quickActions:       { display:"flex", gap:12, padding:"0 16px 20px" },
-  quickBtn:           { flex:1, border:"none", borderRadius:18, padding:"20px 14px", display:"flex", flexDirection:"column", alignItems:"flex-start", gap:8, cursor:"pointer", color:"#fff", fontSize:14, fontWeight:700 },
-  prCard:             { margin:"0 16px 20px", background:"linear-gradient(135deg,#F7B731 0%,#FF6B35 100%)", borderRadius:18, padding:"16px 20px", cursor:"pointer" },
-  prCardLabel:        { fontSize:11, fontWeight:700, letterSpacing:2, color:"rgba(0,0,0,0.5)", marginBottom:4 },
-  prCardExercise:     { fontSize:18, fontWeight:700, color:"#000", marginBottom:2 },
-  prCardValue:        { fontSize:36, fontWeight:900, color:"#000", lineHeight:1 },
-  prCardUnit:         { fontSize:16, fontWeight:400 },
-  prCardDate:         { fontSize:12, color:"rgba(0,0,0,0.5)", marginTop:4 },
-  section:            { padding:"0 16px" },
-  sectionHeader:      { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 },
-  sectionTitle:       { color:"#666", fontSize:12, fontWeight:700, letterSpacing:2 },
-  sectionBtn:         { background:"none", border:"1px solid #333", borderRadius:8, padding:"4px 10px", color:"#FF6B35", fontSize:13, cursor:"pointer" },
-  empty:              { color:"#444", fontSize:14, textAlign:"center", padding:"32px 0", lineHeight:1.8, whiteSpace:"pre-line" },
-  workoutCard:        { background:"#13131A", borderRadius:16, padding:"14px 16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" },
-  workoutCardInfo:    { flex:1 },
-  workoutCardName:    { color:"#fff", fontSize:16, fontWeight:700, marginBottom:2 },
-  workoutCardMeta:    { color:"#666", fontSize:12, marginBottom:6 },
-  blockDots:          { display:"flex", gap:4 },
-  blockDot:           { width:6, height:6, borderRadius:3 },
-  deleteBtn:          { background:"none", border:"none", color:"#444", cursor:"pointer", padding:6, display:"flex" },
-  startBtn:           { background:"#FF6B35", border:"none", borderRadius:14, width:44, height:44, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" },
-  timerHeader:        { padding:"max(52px, env(safe-area-inset-top, 52px)) 16px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" },
-  timerTitle:         { color:"#fff", fontSize:16, fontWeight:700, letterSpacing:1, flex:1, textAlign:"center" },
-  backBtn:            { background:"none", border:"none", color:"#888", cursor:"pointer", padding:4, display:"flex" },
-  blockBar:           { display:"flex", gap:3, padding:"0 16px 12px", height:10 },
-  blockBarItem:       { height:4, borderRadius:2, minWidth:4, transition:"background 0.3s" },
-  timerCircleWrapper: { position:"relative", width:260, height:260, margin:"0 auto 16px", display:"flex", alignItems:"center", justifyContent:"center" },
-  timerOverlay:       { position:"absolute", top:0, left:0, right:0, bottom:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" },
-  timerLabel:         { fontSize:11, fontWeight:700, letterSpacing:3, marginBottom:4 },
-  timerDisplay:       { color:"#fff", fontSize:56, fontWeight:900, letterSpacing:-2, lineHeight:1 },
-  timerSub:           { color:"#555", fontSize:14, marginTop:8 },
-  timerControls:      { display:"flex", alignItems:"center", justifyContent:"center", gap:24, marginBottom:16 },
-  controlBtn:         { background:"#1E1E2E", border:"none", borderRadius:16, width:52, height:52, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff" },
-  playBtn:            { border:"none", borderRadius:28, width:72, height:72, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"background 0.3s" },
-  addBlockRow:        { display:"flex", gap:8, padding:"0 16px 12px", justifyContent:"center" },
-  addBlockBtn:        { background:"#0E0E16", border:"1px solid", borderRadius:10, padding:"8px 12px", cursor:"pointer", display:"flex", alignItems:"center" },
-  blockList:          { padding:"0 16px", maxHeight:220, overflowY:"auto" },
-  blockListItem:      { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", marginBottom:4, background:"#13131A", borderRadius:8, borderLeft:"3px solid" },
-  screenHeader:       { padding:"max(52px, env(safe-area-inset-top, 52px)) 16px 16px", display:"flex", alignItems:"center", justifyContent:"space-between" },
-  screenHeaderTitle:  { color:"#fff", fontSize:15, fontWeight:700, letterSpacing:2, flex:1, textAlign:"center" },
-  prEmpty:            { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"70vh", textAlign:"center" },
-  prGroup:            { marginBottom:24 },
-  prGroupTitle:       { color:"#FF6B35", fontSize:12, fontWeight:700, letterSpacing:2, marginBottom:8 },
-  prRow:              { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 14px", background:"#13131A", borderRadius:12, marginBottom:6 },
-  prRowLeft:          { flex:1 },
-  prRowValue:         { color:"#fff", fontSize:22, fontWeight:800 },
-  prRowUnit:          { fontSize:13, fontWeight:400, color:"#888" },
-  prRowNotes:         { color:"#555", fontSize:12, marginTop:2 },
-  prRowDate:          { color:"#555", fontSize:12 },
-  builderMeta:        { display:"flex", justifyContent:"space-between", marginBottom:14, fontSize:13 },
-  builderBlock:       { display:"flex", alignItems:"center", gap:8, background:"#13131A", borderRadius:12, padding:"12px 10px", marginBottom:8 },
-  builderBlockAccent: { width:4, height:40, borderRadius:2, flexShrink:0 },
-  builderBlockBody:   { flex:1 },
-  builderBlockType:   { fontSize:10, fontWeight:700, letterSpacing:1, color:"#666" },
-  builderBlockLabel:  { fontSize:14, color:"#fff", fontWeight:600, marginTop:2 },
-  builderBlockTime:   { color:"#FF6B35", fontSize:14, fontWeight:700, marginRight:4 },
-  arrowBtn:           { background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:10, padding:1, lineHeight:1 },
-  addBlockGrid:       { display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 },
-  addTypeBtn:         { background:"#0E0E16", border:"1px solid", borderRadius:12, padding:"12px", cursor:"pointer", textAlign:"center" },
-  modalOverlay:       { position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"flex-end", zIndex:100 },
-  modal:              { background:"#13131A", borderRadius:"24px 24px 0 0", padding:"24px 20px 40px", width:"100%", maxWidth:430, margin:"0 auto" },
-  modalHeader:        { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
-  modalTitle:         { color:"#fff", fontSize:18, fontWeight:700 },
-  modalClose:         { background:"none", border:"none", color:"#666", cursor:"pointer", display:"flex" },
-  input:              { width:"100%", background:"#0A0A0F", border:"1px solid #2A2A3A", borderRadius:12, padding:"12px 14px", color:"#fff", fontSize:15, marginBottom:12, boxSizing:"border-box", outline:"none" },
-  unitRow:            { display:"flex", flexWrap:"wrap", gap:4 },
-  unitBtn:            { border:"none", borderRadius:8, padding:"8px 8px", cursor:"pointer", fontSize:11, fontWeight:700, minWidth:36 },
-  submitBtn:          { width:"100%", background:"#FF6B35", border:"none", borderRadius:14, padding:"16px", color:"#fff", fontSize:16, fontWeight:700, cursor:"pointer", letterSpacing:1 },
-  typeBtn:            { flex:1, border:"none", borderRadius:8, padding:"8px 4px", cursor:"pointer", fontWeight:700 },
-  durationBtn:        { background:"#1E1E2E", border:"none", borderRadius:8, padding:"8px 10px", color:"#FF6B35", fontSize:12, fontWeight:700, cursor:"pointer" },
-  durationDisplay:    { flex:1, textAlign:"center", color:"#fff", fontSize:28, fontWeight:800 },
-  scanCta:            { display:"flex", alignItems:"center", gap:12, margin:"0 16px 20px", background:"linear-gradient(135deg,#1A1A2E 0%,#16213E 100%)", border:"1px solid #A29BFE44", borderRadius:18, padding:"16px 18px", cursor:"pointer", color:"#888", width:"calc(100% - 32px)", textAlign:"left" },
-  scanIdle:           { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"70vh", padding:"0 32px", textAlign:"center" },
-  scanIllustration:   { fontSize:72, marginBottom:20 },
-  scanPickBtn:        { display:"flex", alignItems:"center", gap:10, background:"#A29BFE", border:"none", borderRadius:16, padding:"16px 32px", color:"#fff", fontSize:16, fontWeight:700, cursor:"pointer" },
-  scanLoading:        { display:"flex", flexDirection:"column", alignItems:"center", minHeight:"70vh" },
-  scanPreviewImg:     { width:"100%", maxHeight:220, objectFit:"cover", borderRadius:"0 0 20px 20px", marginBottom:0 },
-  scanSpinnerWrap:    { display:"flex", flexDirection:"column", alignItems:"center", marginTop:32 },
-  scanSpinner:        { width:48, height:48, border:"4px solid #1E1E2E", borderTop:"4px solid #A29BFE", borderRadius:"50%", animation:"spin 0.9s linear infinite" },
-  scanResultHeader:   { display:"flex", gap:12, alignItems:"flex-start", marginBottom:16, marginTop:4 },
-  scanThumb:          { width:72, height:72, objectFit:"cover", borderRadius:12, flexShrink:0 },
-  scanBlock:          { display:"flex", alignItems:"center", gap:8, background:"#13131A", borderRadius:12, padding:"12px 10px", marginBottom:8 },
-  scanActions:        { position:"fixed", bottom:0, left:0, right:0, display:"flex", gap:10, padding:"12px 16px 32px", background:"#0A0A0F", borderTop:"1px solid #1E1E2E", maxWidth:430, margin:"0 auto" },
+  screen:{minHeight:"100vh",background:"#0A0A0F",overflowY:"auto",paddingBottom:40,fontFamily:"'-apple-system',BlinkMacSystemFont,'SF Pro Display',sans-serif"},
+  homeHeader:{padding:"env(safe-area-inset-top,52px) 20px 20px",paddingTop:"max(52px,env(safe-area-inset-top,52px))",display:"flex",justifyContent:"space-between",alignItems:"flex-start"},
+  greeting:{color:"#888",fontSize:14,marginBottom:4,letterSpacing:1},homeTitle:{color:"#fff",fontSize:42,fontWeight:900,lineHeight:1.05,letterSpacing:-1,whiteSpace:"pre-line"},
+  prBadge:{background:"#1E1E2E",borderRadius:14,padding:"12px 14px",display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",color:"#F7B731"},prCount:{color:"#fff",fontSize:18,fontWeight:700},
+  quickActions:{display:"flex",gap:12,padding:"0 16px 20px"},quickBtn:{flex:1,border:"none",borderRadius:18,padding:"20px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8,cursor:"pointer",color:"#fff",fontSize:14,fontWeight:700},
+  prCard:{margin:"0 16px 20px",background:"linear-gradient(135deg,#F7B731 0%,#FF6B35 100%)",borderRadius:18,padding:"16px 20px",cursor:"pointer"},prCardLabel:{fontSize:11,fontWeight:700,letterSpacing:2,color:"rgba(0,0,0,0.5)",marginBottom:4},prCardExercise:{fontSize:18,fontWeight:700,color:"#000",marginBottom:2},prCardValue:{fontSize:36,fontWeight:900,color:"#000",lineHeight:1},prCardUnit:{fontSize:16,fontWeight:400},prCardDate:{fontSize:12,color:"rgba(0,0,0,0.5)",marginTop:4},
+  section:{padding:"0 16px"},sectionHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12},sectionTitle:{color:"#666",fontSize:12,fontWeight:700,letterSpacing:2},sectionBtn:{background:"none",border:"1px solid #333",borderRadius:8,padding:"4px 10px",color:"#FF6B35",fontSize:13,cursor:"pointer"},
+  empty:{color:"#444",fontSize:14,textAlign:"center",padding:"32px 0",lineHeight:1.8,whiteSpace:"pre-line"},
+  workoutCard:{background:"#13131A",borderRadius:16,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"},workoutCardInfo:{flex:1},workoutCardName:{color:"#fff",fontSize:16,fontWeight:700,marginBottom:2},workoutCardMeta:{color:"#666",fontSize:12,marginBottom:6},blockDots:{display:"flex",gap:4},blockDot:{width:6,height:6,borderRadius:3},
+  deleteBtn:{background:"none",border:"none",color:"#444",cursor:"pointer",padding:6,display:"flex"},
+  editBtn:{background:"none",border:"1px solid #333",borderRadius:8,padding:"6px 8px",color:"#888",cursor:"pointer",display:"flex"},
+  startBtn:{background:"#FF6B35",border:"none",borderRadius:14,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"},
+  timerHeader:{padding:"max(52px,env(safe-area-inset-top,52px)) 16px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"},timerTitle:{color:"#fff",fontSize:16,fontWeight:700,letterSpacing:1,flex:1,textAlign:"center"},
+  backBtn:{background:"none",border:"none",color:"#888",cursor:"pointer",padding:4,display:"flex"},blockBar:{display:"flex",gap:3,padding:"0 16px 12px",height:10},blockBarItem:{height:4,borderRadius:2,minWidth:4,transition:"background 0.3s"},
+  timerCircleWrapper:{position:"relative",width:260,height:260,margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center"},timerOverlay:{position:"absolute",top:0,left:0,right:0,bottom:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"},timerLabel:{fontSize:11,fontWeight:700,letterSpacing:3,marginBottom:4},timerDisplay:{color:"#fff",fontSize:56,fontWeight:900,letterSpacing:-2,lineHeight:1},timerSub:{color:"#555",fontSize:14,marginTop:8},
+  timerControls:{display:"flex",alignItems:"center",justifyContent:"center",gap:24,marginBottom:16},controlBtn:{background:"#1E1E2E",border:"none",borderRadius:16,width:52,height:52,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff"},playBtn:{border:"none",borderRadius:28,width:72,height:72,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"background 0.3s"},
+  addBlockRow:{display:"flex",gap:8,padding:"0 16px 12px",justifyContent:"center"},addBlockBtn:{background:"#0E0E16",border:"1px solid",borderRadius:10,padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center"},blockList:{padding:"0 16px",maxHeight:220,overflowY:"auto"},blockListItem:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",marginBottom:4,background:"#13131A",borderRadius:8,borderLeft:"3px solid"},
+  screenHeader:{padding:"max(52px,env(safe-area-inset-top,52px)) 16px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"},screenHeaderTitle:{color:"#fff",fontSize:15,fontWeight:700,letterSpacing:2,flex:1,textAlign:"center"},
+  prEmpty:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",textAlign:"center"},prGroup:{marginBottom:24},prGroupTitle:{color:"#FF6B35",fontSize:12,fontWeight:700,letterSpacing:2,marginBottom:8},prRow:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#13131A",borderRadius:12,marginBottom:6},prRowLeft:{flex:1},prRowValue:{color:"#fff",fontSize:22,fontWeight:800},prRowUnit:{fontSize:13,fontWeight:400,color:"#888"},prRowNotes:{color:"#555",fontSize:12,marginTop:2},prRowDate:{color:"#555",fontSize:12},
+  builderMeta:{display:"flex",justifyContent:"space-between",marginBottom:14,fontSize:13},builderBlock:{display:"flex",alignItems:"center",gap:8,background:"#13131A",borderRadius:12,padding:"12px 10px",marginBottom:8},builderBlockAccent:{width:4,height:40,borderRadius:2,flexShrink:0},builderBlockBody:{flex:1},builderBlockType:{fontSize:10,fontWeight:700,letterSpacing:1,color:"#666"},builderBlockLabel:{fontSize:14,color:"#fff",fontWeight:600,marginTop:2},builderBlockTime:{color:"#FF6B35",fontSize:14,fontWeight:700,marginRight:4},arrowBtn:{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,padding:1,lineHeight:1},addBlockGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12},addTypeBtn:{background:"#0E0E16",border:"1px solid",borderRadius:12,padding:"12px",cursor:"pointer",textAlign:"center"},
+  modalOverlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-end",zIndex:100},modal:{background:"#13131A",borderRadius:"24px 24px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:430,margin:"0 auto",maxHeight:"85vh",overflowY:"auto"},modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20},modalTitle:{color:"#fff",fontSize:18,fontWeight:700},modalClose:{background:"none",border:"none",color:"#666",cursor:"pointer",display:"flex"},
+  input:{width:"100%",background:"#0A0A0F",border:"1px solid #2A2A3A",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:15,marginBottom:12,boxSizing:"border-box",outline:"none"},unitRow:{display:"flex",flexWrap:"wrap",gap:4},unitBtn:{border:"none",borderRadius:8,padding:"8px 8px",cursor:"pointer",fontSize:11,fontWeight:700,minWidth:36},submitBtn:{width:"100%",background:"#FF6B35",border:"none",borderRadius:14,padding:"16px",color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer",letterSpacing:1},typeBtn:{flex:1,border:"none",borderRadius:8,padding:"8px 4px",cursor:"pointer",fontWeight:700},durationBtn:{background:"#1E1E2E",border:"none",borderRadius:8,padding:"8px 10px",color:"#FF6B35",fontSize:12,fontWeight:700,cursor:"pointer"},
+  scanCta:{display:"flex",alignItems:"center",gap:12,margin:"0 16px 20px",background:"linear-gradient(135deg,#1A1A2E 0%,#16213E 100%)",border:"1px solid #A29BFE44",borderRadius:18,padding:"16px 18px",cursor:"pointer",color:"#888",width:"calc(100% - 32px)",textAlign:"left"},scanIdle:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"0 32px",textAlign:"center"},scanIllustration:{fontSize:72,marginBottom:20},
+  scanLoading:{display:"flex",flexDirection:"column",alignItems:"center",minHeight:"70vh"},scanPreviewImg:{width:"100%",maxHeight:220,objectFit:"cover",borderRadius:"0 0 20px 20px",marginBottom:0},scanSpinnerWrap:{display:"flex",flexDirection:"column",alignItems:"center",marginTop:32},scanSpinner:{width:48,height:48,border:"4px solid #1E1E2E",borderTop:"4px solid #A29BFE",borderRadius:"50%",animation:"spin 0.9s linear infinite"},scanResultHeader:{display:"flex",gap:12,alignItems:"flex-start",marginBottom:16,marginTop:4},scanThumb:{width:72,height:72,objectFit:"cover",borderRadius:12,flexShrink:0},scanBlock:{display:"flex",alignItems:"center",gap:8,background:"#13131A",borderRadius:12,padding:"12px 10px",marginBottom:8},scanActions:{position:"fixed",bottom:0,left:0,right:0,display:"flex",gap:10,padding:"12px 16px 32px",background:"#0A0A0F",borderTop:"1px solid #1E1E2E",maxWidth:430,margin:"0 auto"},
 };
 
-// ─── Mount ───────────────────────────────────────────────────────────────────
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(React.createElement(App));
