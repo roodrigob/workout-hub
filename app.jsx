@@ -932,27 +932,7 @@ function BuilderScreen({ workouts, saveWorkouts, setScreen }) {
         )
       )
     ),
-    // FILE PICKER MODAL
-    showPicker && React.createElement('div', { style: S.modalOverlay, onClick:(e)=>{ if(e.target===e.currentTarget) setShowPicker(false); } },
-      React.createElement('div', { style: S.modal },
-        React.createElement('div', { style: S.modalHeader },
-          React.createElement('span', { style: S.modalTitle }, "Escanear Treino"),
-          React.createElement('button', { style: S.modalClose, onClick: () => setShowPicker(false) },
-            React.createElement(Icon, { d: icons.close, size:20 })
-          )
-        ),
-        React.createElement('div', { style:{ color:"#888", fontSize:13, marginBottom:16, lineHeight:1.6 } },
-          "Toque abaixo para escolher uma foto do seu treino e montar os blocos automaticamente."
-        ),
-        React.createElement('input', {
-          type: "file", accept: "image/*", onChange: handleFile,
-          style:{ display:"block", width:"100%", padding:"14px",
-                  background:"#4361EE22", border:"2px dashed #4361EE",
-                  borderRadius:14, color:"#A29BFE", fontSize:15,
-                  fontWeight:700, cursor:"pointer", boxSizing:"border-box" }
-        })
-      )
-    ),
+
     editBlock && React.createElement(BlockEditModal, {
       block: editBlock,
       onChange: setEditBlock,
@@ -973,12 +953,10 @@ function ScanScreen({ setScreen, saveWorkouts, workouts, startWorkout }) {
   const [errMsg, setErrMsg]     = useState("");
   const [editIdx, setEditIdx]   = useState(null);
   const [editBlock, setEditBlock] = useState(null);
-  const [showPicker, setShowPicker] = useState(false);
 
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
-    setShowPicker(false);
     if (!file) return;
     // show preview
     const reader = new FileReader();
@@ -1022,8 +1000,7 @@ Regras OBRIGATÓRIAS:
 
     try {
       // Call our Netlify proxy — avoids CORS/Safari restrictions
-      const fnUrl2 = window.location.hostname.includes("netlify") ? "/.netlify/functions/analyze" : "/api/analyze";
-      const res = await fetch(fnUrl2, {
+      const res = await fetch(window.location.hostname.includes("netlify") ? "/.netlify/functions/analyze" : "/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1107,6 +1084,18 @@ Regras OBRIGATÓRIAS:
       React.createElement('div', { style:{ width:32 } })
     ),
 
+    // Input sempre visivel
+    React.createElement('div', { style:{ padding:"0 16px 16px" } },
+      React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } }, "FOTO DO TREINO"),
+      React.createElement('input', {
+        type:"file", accept:"image/*", onChange: handleFile,
+        style:{ display:"block", width:"100%", padding:"13px 14px",
+                background:"#13131A", border:"1.5px dashed #4361EE",
+                borderRadius:14, color:"#A29BFE", fontSize:14,
+                fontWeight:600, cursor:"pointer", boxSizing:"border-box" }
+      })
+    ),
+
 
     // ── IDLE ─────────────────────────────────────────────────────────────
     phase === "idle" && React.createElement('div', { style: S.scanIdle },
@@ -1141,9 +1130,7 @@ Regras OBRIGATÓRIAS:
       React.createElement('div', { style:{ fontSize:48, marginBottom:12 } }, "\u26A0\uFE0F"),
       React.createElement('div', { style:{ color:"#FF4444", fontSize:16, fontWeight:700, marginBottom:8 } }, "Não foi possível analisar"),
       React.createElement('div', { style:{ color:"#666", fontSize:13, textAlign:"center", maxWidth:280, marginBottom:24, lineHeight:1.6 } }, errMsg),
-      React.createElement('button', { style: S.scanPickBtn, onClick: () => setShowPicker(true) },
-        React.createElement('span', null, "Tentar outra foto")
-      ),
+      React.createElement('div', { style:{ color:"#555", fontSize:13 } }, "Toque no campo acima para tentar novamente"),
     ),
 
     // ── PREVIEW ───────────────────────────────────────────────────────────
@@ -1469,8 +1456,7 @@ function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) 
       const safeType = ["image/jpeg","image/png","image/gif","image/webp"].includes(file.type) ? file.type : "image/jpeg";
       const prompt   = 'Analise esta imagem de treino e extraia o conteudo. Retorne APENAS JSON valido sem markdown: {"name":"nome do treino","items":["linha como aparece na imagem"],"notes":"observacoes ou vazio"}. Copie o texto fielmente, max 30 itens, ignore logos.';
       try {
-        const fnUrl = window.location.hostname.includes("netlify") ? "/.netlify/functions/analyze" : "/api/analyze";
-        const res = await fetch(fnUrl, {
+        const res = await fetch(window.location.hostname.includes("netlify") ? "/.netlify/functions/analyze" : "/api/analyze", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:800,
             messages:[{ role:"user", content:[
@@ -1506,32 +1492,23 @@ function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) 
       }, "Timer")
     ),
 
-    // Input file direto na tela, sem modal, sem label wrapper — igual ao input do PRModal
-    React.createElement('div', { style:{ padding:"16px 16px 0" } },
-      React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } },
-        phase === "done" ? "TROCAR FOTO" : "ESCOLHER FOTO DO TREINO"
-      ),
-      React.createElement('input', {
-        type: "file",
-        accept: "image/*",
-        onChange: handleFile,
-        style:{
-          display: "block",
-          width: "100%",
-          padding: "13px 14px",
-          background: "#13131A",
-          border: "1.5px dashed #00C9A7",
-          borderRadius: 14,
-          color: "#00C9A7",
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: "pointer",
-          boxSizing: "border-box",
-        }
-      })
+    // Always-visible file input at the top
+    React.createElement('div', { style:{ padding:"12px 16px 0" } },
+      React.createElement('label', { style:{ display:"block" } },
+        React.createElement('div', { style:{ color:"#888", fontSize:11, fontWeight:700, letterSpacing:2, marginBottom:8 } },
+          phase === "done" ? "TROCAR FOTO" : "CARREGAR FOTO DO TREINO"
+        ),
+        React.createElement('input', {
+          type:"file", accept:"image/*", onChange: handleFile,
+          style:{ display:"block", width:"100%", padding:"13px 14px",
+                  background:"#13131A", border:"1.5px dashed #00C9A7",
+                  borderRadius:14, color:"#00C9A7", fontSize:14,
+                  fontWeight:600, cursor:"pointer", boxSizing:"border-box" }
+        })
+      )
     ),
 
-    phase === "loading" && React.createElement('div', { style:{ display:"flex", flexDirection:"column", alignItems:"center", padding:"48px 16px" } },
+    phase === "loading" && React.createElement('div', { style:{ ...S.scanIdle, minHeight:"50vh" } },
       React.createElement('div', { style:{ ...S.scanSpinner, borderTopColor:"#00C9A7", marginBottom:16 } }),
       React.createElement('div', { style:{ color:"#00C9A7", fontSize:14, fontWeight:700 } }, "Lendo treino...")
     ),
@@ -1542,9 +1519,9 @@ function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) 
     ),
 
     phase === "idle" && React.createElement('div', { style:{ padding:"32px 16px", textAlign:"center" } },
-      React.createElement('div', { style:{ fontSize:56, marginBottom:12 } }, "\uD83D\uDCCB"),
+      React.createElement('div', { style:{ fontSize:56, marginBottom:12 } }, "[]"),
       React.createElement('div', { style:{ color:"#555", fontSize:14, lineHeight:1.7 } },
-        "Escolha uma foto do seu treino acima para consultar durante o treino."
+        "Escolha uma foto do seu treino acima."
       )
     ),
 
@@ -1553,7 +1530,7 @@ function CheatsheetScreen({ setScreen, cheatsheet, setCheatsheet, prevScreen }) 
         workout.preview && React.createElement('img', { src: workout.preview, style:{ width:52, height:52, objectFit:"cover", borderRadius:8, flexShrink:0 } }),
         React.createElement('div', { style:{ flex:1 } },
           React.createElement('div', { style:{ color:"#fff", fontSize:17, fontWeight:800 } }, workout.name),
-          React.createElement('div', { style:{ color:"#666", fontSize:12, marginTop:3 } }, (workout.items ? workout.items.length : 0) + " itens")
+          React.createElement('div', { style:{ color:"#666", fontSize:12, marginTop:3 } }, (workout.items?.length||0) + " itens")
         )
       ),
       (workout.items||[]).map((item, i) =>
