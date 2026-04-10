@@ -358,6 +358,17 @@ function speak(text) {
   window.speechSynthesis.speak(u);
 }
 
+function speakPt(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang   = "pt-BR";
+  u.rate   = 1.05;
+  u.pitch  = 1.1;
+  u.volume = 1;
+  window.speechSynthesis.speak(u);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  TIMER
 // ═══════════════════════════════════════════════════════════════════════════
@@ -423,6 +434,16 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
       const n = idx + 1;
       setBlockIdx(n);
       setTimeLeft(blks[n].duration);
+      // Announce block transitions
+      const nextBlock = blks[n];
+      if (nextBlock.type === "rest") {
+        setTimeout(() => speak("Rest"), 300);
+      } else if (nextBlock.type === "work") {
+        // Count which work round this is (1-based)
+        let workCount = 0;
+        for (let i = 0; i <= n; i++) { if (blks[i].type === "work") workCount++; }
+        setTimeout(() => speakPt("Round " + workCount), 300);
+      }
     } else {
       setDone(true);
       setRunning(false);
@@ -437,7 +458,15 @@ function TimerScreen({ workout, goTo, savePr, cheatsheet, logSession }) {
       const n = leadInRef.current - 1;
       setLeadIn(n);
       if (n > 0 && n <= 3) beepTick();
-      if (n === 0) { beepGo(); leadDoneRef.current = true; }
+      if (n === 0) {
+        beepGo();
+        leadDoneRef.current = true;
+        // Announce first block
+        const firstBlock = blocksRef.current[blockIdxRef.current];
+        if (firstBlock && firstBlock.type === "work") {
+          setTimeout(() => speakPt("Round 1"), 400);
+        }
+      }
       return;
     }
     if (freeMode) { setElapsed(elapsedRef.current + 1); return; }
